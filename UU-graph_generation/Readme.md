@@ -5,6 +5,15 @@ The models that are taken into account are the `NetGAN` model and the `CELL` mod
 - `Cora-ML`: citation network with 2810 nodes
 - `CiteSeer`: citation network with 4230 nodes and multiple connected components.
 
+## How to evaluate the models
+
+Models evaluation in the context of graph generation has always been considered a quite trublesome task. This is beacuse this particular task inherits the difficulties already experimented in the field of data generation, such as image generation, but without having at least the possibility of discerning by sight wheter a certain sample properly generalizes the input data.
+Thorughout the scientific community, it has been widely adopted a rather topological approach: i.e. comparing the generated samples with the input data using several coefficients describing the graph from a topological point of view
+
+## Results
+
+The following are the results of the models over the datasets:
+
 | Graph           | d_max   | d_min | d      | LCC | triangle count | power law exp | gini  | real edge distribution entropy | assortativity | clustering coefficient | #components | cpl   | time[s] |
 | --------------- | ------- | ----- | ------ | --- | -------------- | ------------- | ----- | ------------------------------ | ------------- | ---------------------- | ----------- | ----- | ------- |
 | **Small graph**     | 139     | 1     | 12.807 | 332 | 12181          | 1.583         | 0.641 | 0.865                          | \-0.207       | 0.016                  | 1           | 2.738 | \-      |
