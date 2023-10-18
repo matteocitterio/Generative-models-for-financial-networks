@@ -1,1 +1,1 @@
-# Generation of Unweighted (but directed) graphs
+# Generation of Unweighted (but Directed) graphs
