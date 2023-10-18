@@ -46,4 +46,12 @@ The following are the results of the models over the datasets:
 | **CELL (53% EO)**   | 63.4  | 1     | 2.523 | 3864   | 181            | 2.548         | 0.407 | 0.958                          | \-0,012       | 0.00336                | 120.8       | 9.052 | 10      |
 
 
+## Bibliography:
 
+- GraphRNN (generation evaluation): (https://arxiv.org/abs/1802.08773)
+- GraphVAE: (https://arxiv.org/abs/1611.07308v1)(Kipf Welling 2016) (https://arxiv.org/abs/1802.03480)(2018)
+- NetGAN:(paper [https://arxiv.org/abs/1803.00816]), (implementation: [https://github.com/mmiller96/netgan_pytorch])
+- Cell: (paper [https://proceedings.mlr.press/v119/rendsburg20a.html]), implementation: [https://github.com/hheidrich/CELL]
+- eros renyi graph:[https://snap.stanford.edu/class/cs224w-readings/erdos59random.pdf]
+- cora ml dataset: graph extraction: https://arxiv.org/abs/1707.03815 raw data: https://link.springer.com/article/10.1023/A:1009953814988
+- Citeseer dataset: [https://arxiv.org/abs/1603.08861]
