@@ -17,7 +17,8 @@ Thorughout the scientific community, it has been widely adopted a rather topolog
 ## List of graph statistics
 
 - Assortativity: $\frac{cov{(X,Y)}}{\sigma_{X}\sigma_{Y}}$ It is the Pearson's correlation of degrees of connencted nodes, where the $(X,Y)$ pairs represent the degrees of connected nodes
-- Power law exponent: $1+n\left(\sum_{v\inV}{\log{\frac{d(u)}{d_{min}}}}\right)^{-1}$
+- Power law exponent: $1+n\left(\sum_{v\in V}{\log{\frac{d(u)}{d_{min}}}}\right)^{-1}$ It is the exponent of the power law distribution, where $d_{min}$ denotes the minimum degree in a network
+- Gini Coefficient: $\frac{2\sum_{i=1}^{N}{i\hat{d}_{i}}}{N\sum_{i=1}^{N}{\hat{d}_{i}}}$
 
 ## Results
 
