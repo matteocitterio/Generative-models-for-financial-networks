@@ -16,7 +16,7 @@ Thorughout the scientific community, it has been widely adopted a rather topolog
 
 ## List of graph statistics
 
-- Assortativity: $\frac{1}{2}$
+- Assortativity: $\frac{\cov{(X,Y)}}{\sigma_{X}\sigma_{Y}}$
 
 ## Results
 
