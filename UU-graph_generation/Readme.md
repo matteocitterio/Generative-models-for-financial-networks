@@ -16,7 +16,8 @@ Thorughout the scientific community, it has been widely adopted a rather topolog
 
 ## List of graph statistics
 
-- Assortativity: $\frac{\cov{(X,Y)}}{\sigma_{X}\sigma_{Y}}$
+- Assortativity: $\frac{cov{(X,Y)}}{\sigma_{X}\sigma_{Y}}$ It is the Pearson's correlation of degrees of connencted nodes, where the $(X,Y)$ pairs represent the degrees of connected nodes
+- Power law exponent: $1+n\left(\right)$
 
 ## Results
 
