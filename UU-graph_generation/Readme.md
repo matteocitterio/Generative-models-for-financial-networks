@@ -17,6 +17,10 @@ Thorughout the scientific community, it has been widely adopted a rather topolog
 ## List of graph statistics
 
 - **Assortativity**: $\frac{cov{(X,Y)}}{\sigma_{X}\sigma_{Y}}$ It is the Pearson's correlation of degrees of connencted nodes, where the $(X,Y)$ pairs represent the degrees of connected nodes
+- **d_max**: maximum degree among the nodes
+- **d_min**: minimum degree among the nodes
+- **LCC**: Largest connected component
+- **Triangle count**: count of triangles within the graph
 - **Power law exponent**: $1+n\left(\sum_{v\in V}{\log{\frac{d(u)}{d_{min}}}}\right)^{-1}$ It is the exponent of the power law distribution, where $d_{min}$ denotes the minimum degree in a network
 - **Gini Coefficient**: $\frac{2\sum_{i=1}^{N}{i\hat{d}{i}}}{{N\sum{i=1}^{N}{\hat{d}_{i}}}}-\frac{N+1}{N}$ It is a common measure for inequality in a distribution, where $\hat{d}$ is the sorted list of degrees in the graph
 - **Relative edge distribution entropy**: $-\frac{1}{\log{N}} \sum_{v\in V}{\frac{d(v)}{2m} \log{\frac{d(v)}{2m}} }$ It is the normaliezed entropy of the degree distribution, 1 means uniform, 0 means a single node is connected to all others.
