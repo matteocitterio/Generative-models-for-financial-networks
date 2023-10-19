@@ -14,6 +14,10 @@ For a more detailed explaination of the models, see `./Models/`
 Models evaluation in the context of graph generation has always been considered a quite trublesome task. This is beacuse this particular task inherits the difficulties already experimented in the field of data generation, such as image generation, but without having at least the possibility of discerning by sight wheter a certain sample properly generalizes the input data.
 Thorughout the scientific community, it has been widely adopted a rather topological approach: i.e. comparing the generated samples with the input data using several coefficients describing the graph from a topological point of view
 
+## List of graph statistics
+
+- Assortativity: $\frac{1}{2}$
+
 ## Results
 
 The following are the results of the models over the datasets:
