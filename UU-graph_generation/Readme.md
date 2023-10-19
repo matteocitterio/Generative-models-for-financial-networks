@@ -24,7 +24,7 @@ Thorughout the scientific community, it has been widely adopted a rather topolog
 - **Power law exponent**: $1+n\left(\sum_{v\in V}{\log{\frac{d(u)}{d_{min}}}}\right)^{-1}$ It is the exponent of the power law distribution, where $d_{min}$ denotes the minimum degree in a network
 - **Gini Coefficient**: $\frac{2\sum_{i=1}^{N}{i\hat{d}{i}}}{{N\sum{i=1}^{N}{\hat{d}_{i}}}}-\frac{N+1}{N}$ It is a common measure for inequality in a distribution, where $\hat{d}$ is the sorted list of degrees in the graph
 - **Relative edge distribution entropy**: $-\frac{1}{\log{N}} \sum_{v\in V}{\frac{d(v)}{2m} \log{\frac{d(v)}{2m}} }$ It is the normaliezed entropy of the degree distribution, 1 means uniform, 0 means a single node is connected to all others.
-- **Characteristic path length**: $\frac{1}{N(N-1)} \sum_{u\neq v} {d(u,v)}$ Average shortest path length, where $d(u,v)$ is the shortest path length between $u$ and $v$.
+- **Characteristic path length (cpl)**: $\frac{1}{N(N-1)} \sum_{u\neq v} {d(u,v)}$ Average shortest path length, where $d(u,v)$ is the shortest path length between $u$ and $v$.
 - **Wedge count**: $\sum_{v \in V}{d(v)\choose 2}$ Number of wedges, i.e. two-hop paths (3 nodes, 2 edges) in an undirected graph.
 - **Claw count**: number of claws (4 nodes, 3 edges with a central node) within the graph
 - **Clustering coefficient**: $3\cdot\frac{triangle count}{claw count}$
