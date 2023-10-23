@@ -8,4 +8,4 @@ here we normalized the metrics using $\left|\sum_{S_{i}\in S}{\frac{S_{i}}{O_{i}
 
 ## Results:
 
-- DirectedCell, best model: 25.0817% [SampleGraphFromPaths, LocalityLossFunction]
+- DirectedCell, best model: 25.0817% [SampleGraphFromPaths, LocalityLossFunction] [Facebook]
