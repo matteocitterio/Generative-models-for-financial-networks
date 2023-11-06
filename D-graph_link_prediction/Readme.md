@@ -9,3 +9,4 @@ Here you can find the code I used for the EvolveGCN-H model i a temporal link pr
 - `model_managment.py`: takes care of model classes definitions and their methods
 - `train_managment.py`: implementation of the training and evaluation routine
 - `utils.py`: mainly used for argument parsing.
+- `params.yaml`: list of parameters used in the current run.
