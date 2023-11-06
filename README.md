@@ -6,7 +6,4 @@ The repo is organized in folders according to the specific task that is there ta
 
 - **UU-graph_generation**: *unweighted* and *undirected* graph generation
 - **U-graph_generation**: *unweighted* graph generation
-- **graph_generation**: generation of *weighted* and *directed* graphs
-- **C-graph_generation**: *conditioned* generation of graphs
-- **D-graph_generation**: generation of *dynamic* graphs
-- **CD-graph_generation**: *conditioned* generation of *dynamic* graphs
+- **D-graph_link_prediction** *dynamic* graph link prediction
