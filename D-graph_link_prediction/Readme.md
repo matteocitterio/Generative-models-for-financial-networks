@@ -1,4 +1,4 @@
-Please have a look at the [EvolveGCN paper](https://arxiv.org/pdf/1902.10191.pdf) and the [Maximme Labonne book](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python).
+Please have a look at the [EvolveGCN paper](https://arxiv.org/pdf/1902.10191.pdf) and the [Chapter 13 of the Maxime Labonne book](https://github.com/PacktPublishing/Hands-On-Graph-Neural-Networks-Using-Python).
 
 Here you can find the code I used for the EvolveGCN-H model i a temporal link prediction task.
 - `main.py`: main file
