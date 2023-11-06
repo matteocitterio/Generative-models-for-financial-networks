@@ -1,0 +1,40 @@
+# Local / cluster machine parameters
+device : mps
+
+#Dataset params
+maximum_degree : 146              # Largest node degree found throughout all the time steps
+edge_window_size : 1              # Number of time steps in which we should aggregate the edge informations
+
+# Get Sample parameters
+neg_mult : 100                     # multiplier yielding to the number of negative simples withing the training set compared to the number of positive ones
+
+# Splitter params
+no_test : True                    # Wether the splitter class is going to divide data into Train - val - test or just train - val
+train_split : 0.8                 # Training split
+val_split : 0.2                   # validation split, not used if `no_test == True`
+num_hist_steps : 10               # How many steps in the past a single DataPoint will be made of, basically it is the number of steps the model is using to learn the GRU parameters
+
+# Cross entropy params
+cross_entr_weights : [0.0025, 0.9975]   # weights for compensating class unbalancement
+
+# Model params
+extrapolation : False             # Wheter to feed the evolveGCNH with its own node embeddings TO IMPLE
+hidden_channels : 50             # Hidden size of EvolveGCNH TO TUNE
+out_channels : 30                 # Output size of the node embeddings TO TUNE
+
+# Classifier params
+hidden_feats : 100                # Hidden dim of classifier layer TO TUNE
+
+# Optimizer params
+lr: 0.005                         # Learning rate for the adam optimizer
+
+# Training params
+num_of_epochs : 600               # Number of epochs for a training session
+eval_every : 5                   # Number of epochs after which evaluation must be performed
+output_training_file_name : ./results/metrics_test_50.txt         # Name of the output_file for the training
+                                                                  # Name of the output_file for the evaluation will be generated accordingly
+                                                                  # histogram_val_file_name will be generated accordingly
+                                                                  # histogram_train_file_name will be generated accordingly
+# Metrics params
+f1 : True
+num_hist : 400
