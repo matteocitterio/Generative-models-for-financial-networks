@@ -1,0 +1,28 @@
+!!python/object:argparse.Namespace
+dataset_name: MOOC
+device: mps
+dropout_p: 0.5
+edge_window_size: 1
+eval_every: 25
+extrapolation: false
+hidden_channels:
+- 64
+hidden_feats: 32
+k_chebyshev: 3
+loss_class_weights:
+- 1
+- 1
+lr: 0.0001
+maximum_degree_btc: 146
+model_name: EvolveGCN-H
+neg_mult_eval: 1000000000
+neg_mult_training: 100
+num_hist_steps: 6
+num_of_epochs: 300
+number_of_layers: 2
+out_channels: 32
+output_training_file_name: ./results/metrics_test_46.txt
+output_validation_file_name: ./results/metrics_test_46_valid.txt
+time_frequency: 86400
+train_split: 0.8
+val_split: 0.2
