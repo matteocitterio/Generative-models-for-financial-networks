@@ -1,0 +1,33 @@
+!!python/object:argparse.Namespace
+conv_aggr: mean
+conv_num_layers: 2
+dataset_name: wikipedia
+device: gpu
+dropout_p: 0.5
+edge_window_size: 1
+eval_every: 25
+extrapolation: false
+hidden_channels:
+- 64
+hidden_feats: 32
+k_chebyshev: 3
+loss_class_weights:
+- 1
+- 1
+lr: 0.0001
+lstm_num_layers: 1
+maximum_degree_btc: 146
+model_name: GConvGRU
+neg_mult_eval: 10000000000
+neg_mult_training: 100
+num_hist_steps: 2
+num_of_epochs: 300
+number_of_layers: 2
+number_of_predictions: 1
+out_channels: 32
+output_training_file_name: ./results/metrics_test_189.txt
+output_validation_file_name: ./results/metrics_test_189_valid.txt
+safe_gpu_load: false
+time_frequency: 86400
+train_split: 0.8
+val_split: 0.2
