@@ -6,10 +6,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def train(args, splitter, model, optimizer, criterion):
+def train(args, splitter, model, optimizer, criterion, dataset=None):
     """
     Performs training loop and gets the measuruments
     """
+
+    early_stopping = model_managment.EarlyStopping(args)
 
     for e in range(args.num_of_epochs):
     
@@ -17,92 +19,97 @@ def train(args, splitter, model, optimizer, criterion):
         
         # Training Loop
         losses = []
-        aps = []
-        aucs = []
 
         model.train()
 
         for s in loop:
             
-            # Gets the node embeddings, performs predictions and compute metrics
-            if args.extrapolation:
-                ap, auc, loss, extrap_aps, extrap_aucs = run_epoch(args, model, s, criterion)
-            else: 
-                ap, auc, loss = run_epoch(args, model, s, criterion)
+            # Gets the node embeddings, compute the loss
+            loss = run_epoch(args, model, s, criterion, dataset, final=False)
             # Print out UI updates
-            loop.set_postfix(loss=loss.item(), AP = ap, AUC = auc)
+            loop.set_postfix(loss=loss.item())
             # Save computed metrics
             losses.append(loss)
-            aps.append(ap)
-            aucs.append(auc)
+
             # Perform optimization
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
 
-        # At the end of the epoch print out the computed metrics
+        # At the end of the epoch print out the computed loss
         with open(args.output_training_file_name, "a") as file:
 
-            AUCs_tensors = [torch.tensor(auc) for auc in aucs]
-            APs_tensors = [torch.tensor(ap) for ap in aps]
-
             losses = torch.stack(losses)
-            AUCs = torch.stack(AUCs_tensors) 
-            APs = torch.stack(APs_tensors)
-            
-            file.write(f'{e+1} {losses.mean():.5f} {APs.mean():.5f} {AUCs.mean():.5f}\n')
+            file.write(f'{e+1} {losses.mean():.5f}\n')
 
         if ((e+1)%args.eval_every == 0):
 
             # Evaluation at the end of an epoch
-            eval(args, e, model, splitter, criterion)
+            val_loss = eval(args, e, model, splitter, criterion, dataset)
+            #Early Stopping
+            early_stopping(val_loss, model)
+            if early_stopping.early_stop:
+                print("Early stopping")
+                break
 
-def run_epoch(args, model, s, criterion):
+    with open(args.output_training_file_name, "a") as file:
+        file.write('Done\n')
 
+def run_epoch(args, model, s, criterion, dataset, final=False):
+    """
+    run the model over a batch s
+    INPUTS:
+    - args: arguments read through the .yaml file
+    - model: the instantiated model
+    - s: batch of data containing the historical list, positive labels, negative labels and conditions
+    - criterion: the instantiated loss
+    - dataset: original dataset (used only if args.weird_predictions=True)
+    - final: if True it computes all the metrics
+
+    OUTPUTS:
+    - loss: torch.float with require_gradient == True (if model.train())
+    - if Final == True it returns the set of metrics for the processed batch (metrics for every extrapolation point)
+
+    """
+
+    loss = 0
     # Get node_embeddings
     node_embeddings = model(s['hist_adj_list'])
-    #print(s['hist_adj_list'][0].edge_attr)
 
-    # Work positive samples
-    pos_pred = model_managment.predict(node_embeddings, model.classifier, s['positive_edges'][0][0])
-    pos_weights = torch.ones_like(pos_pred)*args.loss_class_weights[0]
-    pos_loss = (criterion(pos_pred, torch.ones_like(pos_pred)) * pos_weights).mean()
+    if final:
+        #These list will have len == `args.number_of_extrapolation`
+        aps = []                        # each element will contain a float (for each prediction step)
+        aucs = []                       # each element will contain a float (for each prediction step)
+        confusion_matrices = []         # each element will contain a list of len==`number_of_thresholds` (for each prediction step)
 
-    # Work negative samples
-    neg_pred = model_managment.predict(node_embeddings, model.classifier, s['negative_edges'][0][0])
-    neg_weights = torch.ones_like(neg_pred)*args.loss_class_weights[1]
-    neg_loss = (criterion(neg_pred, torch.zeros_like(neg_pred)) * neg_weights).mean()
+    for l in range(args.number_of_predictions):
 
-    # get metrics
-    ap, auc = metrics(pos_pred, neg_pred)
-    loss = pos_loss + neg_loss
+        #Get the proper condition
+        condition = None
+        if args.conditioning:
+            condition = s['conditions'][l][0]
 
-    if args.extrapolation:
+        # Work positive samples
+        pos_loss, pos_pred = get_predictions(args, node_embeddings[l], model, s, criterion, dataset, condition, positive=True, prediction_number=l)
+        # Work negative samples
+        neg_loss, neg_pred = get_predictions(args, node_embeddings[l], model, s, criterion, dataset, condition, positive=False, prediction_number=l)
 
-        extrapolated = model.extrapolate(args, node_embeddings)
-        extrap_aps = []
-        extrap_aucs = []
-        extrap_aps.append(ap)
-        extrap_aucs.append(auc)
-        for l in range(args.number_of_predictions-1):
-                    
-            pos_pred = model_managment.predict(extrapolated[l], model.classifier, s['positive_edges'][l+1][0])
-            neg_pred = model_managment.predict(extrapolated[l], model.classifier, s['negative_edges'][l+1][0])
-            pos_weights = torch.ones_like(pos_pred)*1
-            neg_weights = torch.ones_like(neg_pred)*1
-            pos_loss = (criterion(pos_pred, torch.ones_like(pos_pred)) * pos_weights).mean()
-            neg_loss = (criterion(neg_pred, torch.zeros_like(neg_pred)) * neg_weights).mean()
-            ap_e, auc_e = metrics(pos_pred, neg_pred)
-            extrap_aps.append(ap_e)
-            extrap_aucs.append(auc_e)
-            loss += pos_loss + neg_loss
+        #Sum the loss
+        loss += pos_loss + neg_loss
 
-        ap = (ap + np.cumsum(extrap_aps)[-1]) /(len(extrap_aps) +1)
-        auc = (auc + np.cumsum(extrap_aucs)[-1]) /(len(extrap_aucs) +1)
+        # get metrics for the first prediction step (if final==True)
+        if final:
+            ap, auc, confusion_matrix = metrics(pos_pred, neg_pred)
 
-        return ap, auc, loss, extrap_aps, extrap_aucs
+            aps.append(ap)
+            aucs.append(auc)
+            confusion_matrices.append(confusion_matrix)
 
-    return ap, auc, loss
+    if final:        
+        # if final==True
+        return loss, aps, aucs, confusion_matrices
+        
+    return loss
 
 def metrics(pos_pred, neg_pred):
     """
@@ -111,64 +118,107 @@ def metrics(pos_pred, neg_pred):
     y_pred = torch.cat([pos_pred, neg_pred], dim=0).sigmoid().cpu().detach()
     y_true = torch.cat([torch.ones_like(pos_pred), torch.zeros_like(neg_pred)], dim=0).cpu().detach()
 
+    #Define a proper set of thresholds for computing the confusion matrix
+    number_of_thresholds = 3
+    thresholds = np.linspace(torch.min(y_pred), torch.max(y_pred), number_of_thresholds)
+    
+    #Compute confusion matrix
+    cm = [mc.confusion_matrix(y_true, (y_pred.numpy()>=threshold))for threshold in thresholds]
+
+    #Store them as a list where each element is computed over a different threshold
+    tn, fp, fn, tp = zip(*[t.ravel() for t in cm])
+    conf_matrix = np.vstack((tn, fp, fn, tp))
+
     # AUC and MAP
     auc = mc.roc_auc_score(y_true, y_pred)
     ap = mc.average_precision_score(y_true, y_pred)
     
-    return ap, auc
+    return ap, auc, conf_matrix
 
 # Explicitly state that this function is not involved in GD
 @torch.no_grad()
-def eval(args, epoch, model, splitter, criterion):
+def eval(args, epoch, model, splitter, criterion, dataset=None, final=False):
     """
     Performs model evaluation
     """
-    model.eval()                        # Set model to eval mode
+    # Set model to eval mode
+    model.eval()  
+    losses = []    
 
-    AUCs = []
-    APs = []
-    LOSSESs = []
-    Extrap_APS = []
-    Extrap_AUCS = []
+    if final:                  
+
+        batches_of_aps = []
+        batches_of_aucs = []
+        batches_of_cms = []
     
     loop = tqdm(splitter.val,desc=f'Validation epoch {epoch+1}')
     
     for s in loop:
 
-        if args.extrapolation:
-                ap, auc, loss, extrap_aps, extrap_aucs = run_epoch(args, model, s, criterion)
+        if final:
+            # Get the metrics as well
+            loss, aps, aucs, confusion_matrices = run_epoch(args, model, s, criterion, dataset, final=True)
+            batches_of_aps.append(aps)
+            batches_of_aucs.append(aucs)
+            batches_of_cms.append(confusion_matrices)
+
         else: 
-                ap, auc, loss = run_epoch(args, model, s, criterion)
+            loss = run_epoch(args, model, s, criterion, dataset, final=False)
+
         # Print out UI updates
-        loop.set_postfix(loss=loss.item(), AP = ap, AUC = auc)
-        # Save computed metrics
-        AUCs.append(auc)
-        APs.append(ap)
-        LOSSESs.append(loss)
+        loop.set_postfix(loss=loss.item())
+        losses.append(loss)
+            
+    if final:
 
-        if args.extrapolation:
-            Extrap_APS.append(extrap_aps)
-            Extrap_AUCS.append(extrap_aucs)
-        
-    #Convert them in tensors so that torch is happy
-    AUCs_tensors = [torch.tensor(auc) for auc in AUCs]
-    APs_tensors = [torch.tensor(ap) for ap in APs]
-    if args.extrapolation:
-        transposed_extrapolated_APs = list(zip(*Extrap_APS))
-        transposed_extrapolated_AUCs = list(zip(*Extrap_AUCS))
-        
-    LOSSESs = torch.stack(LOSSESs)
-    AUCs = torch.stack(AUCs_tensors)
-    APs = torch.stack(APs_tensors)
-    if args.extrapolation:
-        Extrap_APS = [sum(values) / len(values) for values in transposed_extrapolated_APs]
-        Extrap_AUCS = [sum(values) / len(values) for values in transposed_extrapolated_AUCs]
+        #We want to compute the everage over the batches and output these averages for each extrapolation point
+        averaged_confusion_matrix = np.average(batches_of_cms, axis = 0)  #average over the batches
+        print('Shape conf mat: ', averaged_confusion_matrix.shape, 'We have 4 thresholds, 6 extrap points')
+        averaged_ap = np.average(batches_of_aps, axis = 0)  #average over the batches
+        print('Shape ap: ', averaged_ap.shape, ' 6 extrap points')
+        averaged_auc = np.average(batches_of_aucs, axis = 0)  #average over the batches
+        print('Shape auc: ', averaged_auc.shape, ' 6 extrap points')
 
-    #Save them in a file
+        #Save metrics
+        np.savetxt(f'{args.output_validation_file_name}_CF.txt', np.vstack([averaged_confusion_matrix[i] for i in range(len(averaged_confusion_matrix))]))
+        np.savetxt(f'{args.output_validation_file_name}_AP_AUC.txt', np.vstack((averaged_ap, averaged_auc)))
+        
+    losses = torch.stack(losses)
+
     with open(args.output_validation_file_name, "a") as file:
-        
-        print(f'Epoch {epoch+1} done | Mean Val Loss: {LOSSESs.mean():.5f} | Mean AUC: {AUCs.mean():.5f} | MAP: {APs.mean():.5f}')
-        if args.extrapolation:
-            file.write(f'{epoch+1} {LOSSESs.mean():.5f} {APs.mean():.5f} {AUCs.mean():.5f} {" ".join(f"{E_APS:.5f}" for E_APS in Extrap_APS)} {" ".join(f"{E_AUCS:.5f}" for E_AUCS in Extrap_AUCS)}\n')
-        else:
-            file.write(f'{epoch+1} {LOSSESs.mean():.5f} {APs.mean():.5f} {AUCs.mean():.5f}\n')
+            
+        file.write(f'{epoch+1} {losses.mean():.5f}\n')
+
+    return losses.mean()
+
+#######################################################################################################
+"""
+Some utils to light up a bit the code
+"""
+
+def get_predictions(args, node_embeddings, model, s, criterion, dataset, condition, positive, prediction_number):
+    """
+    Performs predictions and computes the loss
+    """
+
+    #Positive prediction
+    if positive:
+        edges_string = 'positive_edges'
+        class_weights_index = 0
+
+    #Negative prediction
+    else:
+        edges_string = 'negative_edges'
+        class_weights_index = 1
+
+    #Get the model predictions
+    pred = model_managment.predict(args, node_embeddings, model.classifier, s[edges_string][prediction_number][0],dataset, condition)
+    #Get the weights if you are using a class weighted loss
+    weights = torch.ones_like(pred) * args.loss_class_weights[class_weights_index]
+    #Get the loss
+    if positive:
+        #The labels are a `torch.ones_like`
+        return (criterion(pred, torch.ones_like(pred)) * weights).mean(), pred
+    
+    #The labels are a `torch.zeros_like` in the negative case
+    return (criterion(pred, torch.zeros_like(pred)) * weights).mean(), pred

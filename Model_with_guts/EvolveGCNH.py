@@ -46,7 +46,7 @@ class EvolveGCNH(torch.nn.Module):
         self.normalize = normalize
         self.add_self_loops = add_self_loops
         self.weight = None
-        self.device = 'cpu'#('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = 'cuda'#('cuda' if torch.cuda.is_available() else 'cpu')
         self.initial_weight = torch.nn.Parameter(torch.Tensor(in_channels, out_channels)).to(self.device)
         self._create_layers()
         self.reset_parameters()

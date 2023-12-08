@@ -19,7 +19,41 @@ def get_dataset(args):
     if args.dataset_name == 'BTC':
         return build_dataset_btc(args)
     
+    elif args.dataset_name == 'synthetic':
+        return build_synthetic_dataset(args)
+    
     return build_continuous_dataset(args)
+
+def build_synthetic_dataset(args):
+    dataset = torch.load('/u/mcitterio/data/synthetic/400_600_sin2data_.pt')
+    dataset = dataset[200:]
+
+    max_degree = 0
+    for i,data in enumerate(dataset):
+        max_degree = max(max_degree, max(degree(data.edge_index[0])))
+    
+    one_hot_degree_transformation = T.OneHotDegree(int(max_degree))
+
+    subgraphs = []
+    for i in range(len(dataset)):
+
+        subgraph = Data(edge_index = dataset[i].edge_index, num_nodes = dataset[i].num_nodes)
+        subgraph = one_hot_degree_transformation(subgraph)
+        # print(dataset[i].x.shape)
+        # dataset[i].x = torch.tensor(dataset[i].x).view(-1,1).to(torch.float) #da capire
+        # dataset[i].x = torch.tensor(dataset[i].x).view(-1,1)
+        # dataset[i].to(args.device)
+        features = torch.tensor(dataset[i].x).view(-1, 1)
+
+        # Concatenate the tensors along dimension 1
+        subgraph.x = torch.cat([subgraph.x, features], dim=1)
+        #print(subgraph)
+        subgraph.to(args.device)
+        subgraphs.append(subgraph)
+        # subgraphs.append(dataset[i])
+    
+    return subgraphs
+
 
 def build_dataset_btc(args):
     """
@@ -145,7 +179,7 @@ def get_max_degree(dataset, time_frequency):
     
     return max_degree
 
-def get_sample(args, dataset, num_hist_steps, idx, **kwargs):
+def get_sample(args, dataset, num_hist_steps, idx, condition_matrix = None, **kwargs):
         """
         Creates a `DataPoint`
         INPUTS:
@@ -162,9 +196,10 @@ def get_sample(args, dataset, num_hist_steps, idx, **kwargs):
 
         list_of_positive_edges = []
         list_of_negative_edges = []
+        list_of_conditioning = []
 
         num_of_predictions = args.number_of_predictions                 #If 1 no extrapolation performed
-
+        # print(f'idx: {idx}')
         for i in range(num_of_predictions):
 
             num_nodes = dataset[idx + i].num_nodes
@@ -178,18 +213,24 @@ def get_sample(args, dataset, num_hist_steps, idx, **kwargs):
             negative_edges = negative_sampling(edge_index = positive_edges,
                                                     num_nodes = num_nodes,
                                                     num_neg_samples = positive_edges.shape[1] * neg_mult)
-            
+            if args.conditioning:
+                
+                if args.weird_conditions:
+                    list_of_conditioning.append(idx - 1 +i)
+                else:
+                    list_of_conditioning.append(condition_matrix[idx - 1 +i])       # I am giving the graph stats of the day before the predition, so no data in the future
+
             list_of_positive_edges.append(positive_edges)
             list_of_negative_edges.append(negative_edges)
         
-        return {'idx': idx, 'hist_adj_list': hist_adj_list, 'positive_edges': list_of_positive_edges, 'negative_edges': list_of_negative_edges}
+        return {'idx': idx, 'hist_adj_list': hist_adj_list, 'positive_edges': list_of_positive_edges, 'negative_edges': list_of_negative_edges, 'conditions':list_of_conditioning}
 
 class DataSplit(Dataset):
     """
     Manages the data split
     """
 
-    def __init__(self,args, dataset, start, end, **kwargs):
+    def __init__(self,args, dataset, start, end, condition_matrix, **kwargs):
         """
         Start and end are indices indicating what item belongs to this split
         """
@@ -199,6 +240,7 @@ class DataSplit(Dataset):
         self.NumHistSteps = args.num_hist_steps
         self.dataset = dataset                              # Is this thing going to cost me a lot?
         self.args = args
+        self.condition_matrix = condition_matrix
 
     def __len__(self):
         return self.end - self.start
@@ -206,7 +248,7 @@ class DataSplit(Dataset):
     def __getitem__(self, idx):
 
         idx = self.start + idx
-        t = get_sample(self.args, self.dataset, self.NumHistSteps, idx, **self.kwargs)
+        t = get_sample(self.args, self.dataset, self.NumHistSteps, idx, self.condition_matrix, **self.kwargs)
         return t
 
 class Splitter():
@@ -214,7 +256,7 @@ class Splitter():
     Creates train - val 
     """
 
-    def __init__(self, args, dataset):
+    def __init__(self, args, dataset, condition_matrix = None):
 
         NumHistSteps = args.num_hist_steps
         TrainSplit = args.train_split
@@ -233,14 +275,14 @@ class Splitter():
 
         # Create training split
         
-        TrainSet = DataSplit(args, dataset, start, end)
+        TrainSet = DataSplit(args, dataset, start, end, condition_matrix)
         TrainSet = DataLoader(TrainSet, num_workers = 0)
 
         start = end + NumHistSteps + (number_of_predictions-1)
         end = len(dataset) - (number_of_predictions -1)
 
         # Create test set
-        ValSet = DataSplit(args, dataset,  start, end, all_edges=True)
+        ValSet = DataSplit(args, dataset,  start, end, condition_matrix, all_edges=True)
         ValSet = DataLoader(ValSet, num_workers = 0)
 
         total_datapoints = len(TrainSet) + len(ValSet)
