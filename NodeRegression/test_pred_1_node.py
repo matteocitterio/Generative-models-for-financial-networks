@@ -323,10 +323,6 @@ scaler_targets.fit(targets[:training_index,:])
 scaler_targets.scale_ /= 1.25
 targets = torch.tensor(scaler_targets.transform(targets)).to(torch.float32).to(device)
 
-#Decide the training portion of the dataset
-training_portion =  0.8
-training_index = int( training_portion * len(dataset))
-
 #Create the seed0 CIR process and B_t process :
 CIRProcess = sim.CIRProcess[:364]
 B_t = np.asarray([np.prod(1+(CIRProcess[0:t]*1/365)) for t in range(1,len(CIRProcess)+1)])
