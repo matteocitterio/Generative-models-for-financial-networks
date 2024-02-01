@@ -10,8 +10,6 @@ import torch.utils.data as data
 import numpy as np
 from simulation import Simulation
 
-from Analytic_model import PerfectPrediction
-
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
