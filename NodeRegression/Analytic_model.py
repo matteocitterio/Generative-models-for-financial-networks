@@ -8,10 +8,14 @@ from simulation import Simulation
 
 class PerfectPrediction:
     """
-    Handles the entire simulation
+    Analitically reconstructs the margins
     """
 
     def __init__(self, nodes, gamma, years):
+        """
+        Start by instantiating a simulation
+        """
+        
         alpha = 0.6
         b = 0.02
         sigma = 0.14
@@ -48,7 +52,7 @@ class PerfectPrediction:
 
     def GetFloatingLegIJK(self, contract, B_t):
         """
-        DA CAPIRE SE PROPRIO B_T CON STI INDICI O BALLA UN +/-1
+        Returns the floating leg of a single contract at time defined by B_t
         """
 
         t_0, T, delta, R_0, B_t_0 = self.ExtractContract(contract)
@@ -143,7 +147,7 @@ class PerfectPrediction:
         """
         In the training set we have a shape: [N_batches, lookback, N_features]
         """
-        #OCIO CHE IL -2 DIPENDE DA COME COSTRUISCO LA MATRICE X_data IN TEST_1_NODE..
+        #-2 depends on the way in which I do the torch.cat when building the features matrix
         t_s = []
         for i in range(X.shape[0]):
             t_s.append(X[i,-1, -2])
@@ -172,19 +176,16 @@ class PerfectPrediction:
             oldVt.append(self.GetContractValue(contract_timed_for_batch[i], B_t=B_t_s_for_batch[i].item(), t=t_s_for_batch[i] ))
             newVT.append(self.GetContractValue(contract_timed_for_batch[i], B_t=B_t_s_for_batch[i].item()*(1+r_s_for_batch[i].item()/365), t=t_s_for_batch[i]+1 ))
 
-        #print('Old: ', oldVt)
-        #print('New: ', newVT)
-
 
         oldVt = torch.stack(oldVt)
         newVT = torch.stack(newVT)
 
-        MT1 = []
+        MT = []
 
         for i in range(contract_timed_for_batch.shape[0]):
 
-            MT1.append(newVT[i] - ((1+r_s_for_batch[i]/365))*oldVt[i])
+            MT.append(newVT[i] - ((1+r_s_for_batch[i]/365))*oldVt[i])
 
-        MT1 = torch.stack(MT1)
+        MT = torch.stack(MT)
 
-        return MT1
+        return MT
