@@ -1,4 +1,4 @@
-from simulation import Simulation, GetActiveContractsIndices, GetSimulationQuantitiesTensors, return_max_num_contracts, scale_feature_matrix, scale_targets
+from simulation import Simulation, GetActiveContractsIndices, GetSimulationQuantitiesTensors, return_max_num_contracts
 import argparse
 import numpy as np
 import torch
@@ -14,7 +14,7 @@ from torch_geometric.data.temporal import TemporalData
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
-#Get command line input
+#Get command line input as described in the Readme.md
 parser = argparse.ArgumentParser(description='Parser')
 parser.add_argument('--do_simulation', action='store_true', help='Whether to do the simulation or to load a pre-existing sim.E matrix')
 parser.add_argument('--device', type=str, help='Device')
@@ -43,21 +43,21 @@ if args.do_simulation:
 
     #Run the actual simulation
     sim.SimulateAllEdges()
-    np.save('/u/mcitterio/data/edge_features.npy', sim.E)
+    np.save('./edge_features.npy', sim.E)
 
 else:
-    sim.E = np.load('/u/mcitterio/data/edge_features.npy', allow_pickle=True)
+    sim.E = np.load('./edge_features.npy', allow_pickle=True)
 
-# Get the simulation contracts as tensors
+# Get the simulation contract quantities (t,T, ...) as tensors
 contracts = GetSimulationQuantitiesTensors(sim, device)
 
-# Now we need to get the list of indexis of active contracts at time t:
+# Now we need to get the list of indexis of active contracts at time t for all t:
 active_contracts_indices = GetActiveContractsIndices(sim, contracts)
 
-# Get the maximum number of simultaneously active contracts observed for an edge throughout the entire horizon [0,T]
+# Get the maximum number of simultaneously active contracts observed for an edge throughout the entire horizon [0,T] at a specific time t (later used for the padding)
 max_num_contracts = return_max_num_contracts(contracts, active_contracts_indices)
 
-#Define a tqdm loop for UI friendlyness
+#Define a tqdm loop for UI friendliness
 loop = tqdm(range(len(active_contracts_indices)-1), desc='Time')
 dataset = []
 
@@ -71,15 +71,18 @@ for t in loop:
     #Set the current advancement
     loop.set_postfix(t=t)
 
-    #Index are the indices for active contracts at time t
+    #index contains the indices for active contracts at time t
     index = active_contracts_indices[t]
-    #Actually active contracts at this time
+    
+    #Retrieve active contracts at this time
     active_contract_at_time_t = contracts[index]
     
     #This are the edge indexis for all the contracts
     edge_index = torch.stack([active_contract_at_time_t[:,0], active_contract_at_time_t[:,1]], dim=0).to(device)
+    
     #This selects only the edges that actually have a contract, unregarding of the number of contracts they have
     edge_index, unique_indices, counts = torch.unique(edge_index.cpu(), dim=1, return_inverse=True, return_counts=True)
+    
     #Convert edge_index to int type
     edge_index = edge_index.to(torch.int64)
     
@@ -112,7 +115,5 @@ for t in loop:
     subgraph = Data(edge_index=edge_index, x = X, y = y, num_nodes = num_nodes)
     dataset.append(subgraph)
 
-torch.save(dataset, f'/u/mcitterio/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
-
-# Load the list of Data objects
-#loaded_subgraphs = torch.load('subgraphs.pt')
+#Save the dataset
+torch.save(dataset, f'./subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
