@@ -15,5 +15,5 @@ This folder contains the code for predicting the Margin Value of a financial net
 
 ## Margin prediction
 - `Analytic_model.py`: contains a class `PerfectPredition` that performs the reconstruction of $M(t)$ given the contracts and the other quantities. This was used to check whether all the information was passed in the proper way
-- `MarginPrediction.py`: performs the prediction of the Margin value M^{i}(t) for a single node
+- `test_pred_1_node.py`: performs the prediction of the Margin value M^{i}(t) for a single node
 - `PredictingPrice.py`: performs the prediction of p(t,T) using the CIR process r(t). This was used to see whether the model is able of learning the expectation of the process.
