@@ -9,3 +9,4 @@ This folder contains the code for predicting the Margin Value of a financial net
    - `--gamma`: `float` parameter that tunes the intensity of the contract arrival process according to $\lambda(t) = \gamma \cdot \exp{(\eta -\theta r(t))}$ where $r(t)$ is a CIR process
 - `CIR.py`: for simulating the Cox-Ingersoll-Ross process
 - `get_price_matrix.py`: computes a matrix with entrances $p(t,T)$ using a MonteCarlo simulation so that it doesn't compute an MC expectation every time the price function is called.
+- `PriceMatrix_Duffie.npy`: Matrix of prices computed through a MC simulation (see `get_price_matrix.py`) using the CIR parameters found in Duffie et al.
