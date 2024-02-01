@@ -18,7 +18,97 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 #device = 'cpu'
 print('Using device: ', device)
 
+#################################################################
+#Models
+
+class AllSequenceModel(nn.Module):
+    """
+    This one trains the LSTM using the entire sequence of hidden states for each input variable. This specific implementation doesnt support conditioning
+    """
+    
+    def __init__(self, input_size, hidden_size, l, num_layers):
+        """
+        - input_size: int, features dimensions
+        - hidden_size: size of the LSTM hidden state
+        - l: width of the FCNN
+        - num_layers: num layers of the LSTM
+        
+        """
+        super().__init__()
+        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.5, batch_first=True)
+        self.linear = nn.Linear(hidden_size, l)
+        self.fc = nn.Linear(l,int(l/2))
+        self.fc2 = nn.Linear(int(l/2),1)
+        self.relu = nn.LeakyReLU()
+        self.reset_parameters()
+
+    def reset_parameters(self):
+
+        for layer in [self.lstm, self.linear, self.fc,self.fc2]:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
+    def forward(self, x, r):
+        """
+        Here r is not used but still taken as input (to implement)
+        """
+        x, _ = self.lstm(x)
+        x = self.linear(x)
+        x = self.fc(self.relu(x))
+        x = self.fc2(self.relu(x))
+        return x
+
+class Model1(nn.Module):
+    """
+    This model trains the LSTM using only the last hidden state h_T as common in sequence-to-one timeseries forecasting. This implementation supports conditioning.
+    """
+    def __init__(self, input_size, hidden_size, num_layers, linear_witdh):
+        """
+        - input_size: int, features dimensions
+        - hidden_size: size of the LSTM hidden state
+        - linear_width: width of the FCNN
+        - num_layers: num layers of the LSTM
+        """
+        super(Model1, self).__init__()
+        self.lstm = nn.LSTM(input_size = input_size, hidden_size = hidden_size, num_layers= num_layers, batch_first = True)
+        self.fc_1_conditioning = nn.Linear(hidden_size+1, linear_witdh)
+        self.fc_1_unconditioned = nn.Linear(hidden_size, linear_witdh)
+        self.fc_2 = nn.Linear(linear_witdh, 1)
+        self.relu = nn.LeakyReLU()
+        self.reset_parameters()
+
+    def forward(self, X, r, conditioning):
+
+        output, (hn, cn) = self.lstm(X)
+
+        if conditioning:
+            hn = torch.cat([hn[-1],r[:,-1,:]], dim=1)
+        else:
+            hn = hn[-1]
+
+        out = self.relu(hn)
+        
+        if conditioning:
+            out = self.fc_1_conditioning(out) #first Dense
+        else:
+            out = self.fc_1_unconditioned(out)
+            
+        out = self.relu(out) #relu
+        out = self.fc_2(out) #Final Output
+        return out
+
+    def reset_parameters(self):
+
+        for layer in [self.lstm, self.fc_1_conditioning, self.fc_1_unconditioned, self.fc_2]:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
 def predict(model, loader, loader_test, conditioning):
+    """
+    Utils to produce predictions array and visualize them.
+    Please uncomment according to the chosen model
+    """
+    
     model.eval()
     train_predictions = []
     train_labels = []
@@ -30,27 +120,46 @@ def predict(model, loader, loader_test, conditioning):
         loop = tqdm(loader, desc='Train prediction')
     
         for X_batch, y_batch, r_batch in loop:
-    
-            y_pred = model(X_batch, y_batch, conditioning)
-    
+
+            #Uncomment if using model1 and doing conditioning:
+            y_pred = model(X_batch, r=r_batch, conditioning=True)
+            #Uncomment if using model1 and doing the UNconditioned prediction:
+            #y_pred = model(X_batch, r=r_batch, conditioning=False)
+            #Uncomment if using AllSequenceModel
+            #y_pred = model(X_batch, r=None, conditioning=None)
+
+            #loop over batches
             for j in range(y_pred.shape[0]):
-                
-                train_predictions.append(y_pred[j].detach())
+
+                #Uncomment if using model1
+                train_predictions.append(y_pred[j,-1].detach())
                 train_labels.append(y_batch[j,-1].detach())
-                
+                #Uncomment if using AllSequenceModel:
+                #train_predictions.append(y_pred[j,-1].detach())
+                #train_labels.append(y_batch[j,-1].detach())
+        
                 
         loop = tqdm(loader_test, desc='Test prediction')
     
         for X_batch, y_batch, r_batch in loop:
     
-            y_pred = model(X_batch, y_batch, conditioning)
+            #Uncomment if using model1 and doing conditioning:
+            y_pred = model(X_batch, r=r_batch, conditioning=True)
+            #Uncomment if using model1 and doing the UNconditioned prediction:
+            #y_pred = model(X_batch, r=r_batch, conditioning=False)
+            #Uncomment if using AllSequenceModel
+            #y_pred = model(X_batch, r=None, conditioning=None)
     
             for j in range(y_pred.shape[0]):
                 
-                test_predictions.append(y_pred[j].detach())
+                test_predictions.append(y_pred[j,-1].detach())
                 test_labels.append(y_batch[j,-1].detach())
 
     return torch.stack(train_predictions), torch.stack(train_labels), torch.stack(test_predictions), torch.stack(test_labels),
+
+
+######################################
+#Dataset utils
 
 def scale_targets(dataset, index):
 
@@ -111,8 +220,7 @@ def scale_feature_matrix(dataset, index):
     max_T = int(max(combined_of_combined_training[:,1]))
 
     # Initialize the MinMaxScaler
-    #scaler = MinMaxScaler()
-    scaler = StandardScaler()
+    scaler = MinMaxScaler()
 
     # Fit the scaler on the combined data and transform it
     scaler.fit(combined_of_combined_training)
@@ -133,11 +241,19 @@ def scale_feature_matrix(dataset, index):
     scaled_tensors = [finally_tensors[0 + i*num_nodes :num_nodes + i*num_nodes].squeeze() for i in range(len(dataset))]
     return scaled_tensors, max_T
 
+def contract_4_sim(contract):
+    """
+    Inside the simulation.py code the contract convention have shape: (t, delta, T, R(t_0,T), B_t_0 ) but then SimulateNetwork.py used the convention (t,T,delta,R,K). This one
+    simply switches it
+    """
+    return torch.tensor([contract[0], contract[2], contract[1], contract[3], contract[4]])
+
 def create_dataset_all_sequence(dataset,r,targets, lookback):
     """Transform a time series into a prediction dataset
     
     Args:
-        dataset: A numpy array of time series, first dimension is the time steps
+        dataset: An array like of time series
+        reference: reference CIR interest rate process
         lookback: Size of window for prediction
     """
     X, y, reference = [], [], []
@@ -145,7 +261,7 @@ def create_dataset_all_sequence(dataset,r,targets, lookback):
     for i in range(len(dataset)-lookback):
 
         feature = dataset[i : i + lookback, :]
-        #Qui si riferisce gia in avanti quinfi non ho bisogno di spostarlo
+        #Qui si riferisce gia in avanti quindi non ho bisogno di spostarlo
         target = targets[i  : i + lookback ]
         r_temp = r[i + 1 : i + lookback + 1]
 
@@ -155,154 +271,85 @@ def create_dataset_all_sequence(dataset,r,targets, lookback):
 
     return torch.stack(X).to(device), torch.stack(y).to(device), torch.stack(reference).to(device)
 
-class AllSequenceModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, out_shape):
-        super().__init__()
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.5, batch_first=True)
-        self.linear = nn.Linear(hidden_size+1, int(hidden_size+1/2))
-        self.fc = nn.Linear(int(hidden_size+1/2),out_shape)
-        self.relu = nn.ReLU()
-        self.reset_parameters()
+####################################################################
+#Main
 
-    def reset_parameters(self):
-
-        for layer in [self.lstm, self.linear, self.fc]:
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
-
-
-    def forward(self, x, r):
-        x, _ = self.lstm(x)
-        #x = x[:,-1,:]
-        print('outputs shape',x.shape)
-        print('r shape', r.shape)
-        x = torch.cat([x,r], dim=2)#.to(torch.float32)
-        print('x.shape', x.shape)
-        x = self.linear(x)
-        print('x.shape')
-        x = self.fc(self.relu(x))
-        return x
-    
-class Model1(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, linear_witdh):
-        super(Model1, self).__init__()
-
-        self.lstm = nn.LSTM(input_size = input_size, hidden_size = hidden_size, num_layers= num_layers, batch_first = True)
-
-        self.fc_1_conditioning = nn.Linear(hidden_size+1, linear_witdh)
-        self.fc_1_unconditioned = nn.Linear(hidden_size, linear_witdh)
-
-        self.fc_2 = nn.Linear(linear_witdh, 1)
-
-        self.relu = nn.ReLU()
-
-        self.reset_parameters()
-
-    def forward(self, X, r, conditioning):
-
-        output, (hn, cn) = self.lstm(X)
-
-        if conditioning:
-            hn = torch.cat([hn[-1],r[:,-1,:]], dim=1)
-        else:
-            hn = hn[-1]
-
-        out = self.relu(hn)
-        
-        if conditioning:
-            out = self.fc_1_conditioning(out) #first Dense
-        else:
-            out = self.fc_1_unconditioned(out)
-            
-        out = self.relu(out) #relu
-        out = self.fc_2(out) #Final Output
-        return out
-
-    def reset_parameters(self):
-
-        for layer in [self.lstm, self.fc_1_conditioning, self.fc_1_unconditioned, self.fc_2]:
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
-
-    
-class AllSequenceMode_nocond(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers):
-        super().__init__()
-        self.lstm = nn.LSTM(input_size=input_size, hidden_size=hidden_size, num_layers=num_layers, dropout=0.2, batch_first=True)
-        self.linear = nn.Linear(hidden_size, int(hidden_size/2))
-        self.fc = nn.Linear(int(hidden_size/2),1)
-        self.relu = nn.ReLU()
-        self.reset_parameters()
-
-    def reset_parameters(self):
-
-        for layer in [self.lstm, self.linear, self.fc]:
-            if hasattr(layer, 'reset_parameters'):
-                layer.reset_parameters()
-
-
-    def forward(self, x, r):
-        x, _ = self.lstm(x)
-        #x = x[:,-1,:]
-        #x = torch.cat([x,r], dim=2)#.to(torch.float32)
-        x = self.linear(x)
-        x = self.fc(self.relu(x))
-        return x
-
+#Define simulation
 alpha = 0.6
 b = 0.02
 sigma = 0.14
 v_0 = 0.04
-years = 20
+years = 1
 num_nodes = 2
 gamma=49.0
 
-dataset = torch.load(f'/u/mcitterio/data/subgraphs_Duffie_{num_nodes}nodes_{gamma}gamma.pt', map_location=torch.device(device))
-
-
 sim = Simulation(alpha, b, sigma, v_0, years, seed = True, num_nodes = num_nodes, gamma = gamma)
-#Portion it
-#dataset = dataset[365:len(dataset)-365]
+
+"""
+This code will use a fake single contract with maturity T=365 days instead of a produced simulation.
+"""
+
+#Retrieve dataset produced from `SimulateNetwork.py`
+#dataset = torch.load(f'/u/mcitterio/data/subgraphs_Duffie_{num_nodes}nodes_{gamma}gamma.pt', map_location=torch.device(device))
+
+#Create a contract with t_0 = 10, T = 364. and delta +1. R and K are computed using sim utils
+contract = torch.tensor([10., 364., +1.,sim.SwapRate(10, 364), 1.0012891292572021  ]).to(torch.float32)
+
+X = []
+for i in range(0, 10):
+    X.append(torch.zeros_like(contract))
+for i in range(10, 365):
+    X.append(contract)
+
+X = torch.stack(X)
+
+#Decide the training portion of the dataset
+training_portion =  0.8
+training_index = int( training_portion * X.shape[0])
+
+# Identify feautures and targets and reshape them correctly
+features = X
+targets = [sim.GetInstantContractMarginValue(t, contract_4_sim(X[t])) for t in range(364)]
+#features = torch.stack(features)
+targets = torch.tensor(targets)
+targets = targets.reshape(-1,1)
+
+scaler_features = MinMaxScaler()
+scaler_features.fit(features[:training_index,:])
+scaler_features.scale_ /= 1.25
+features = torch.tensor(scaler_features.transform(features)).to(torch.float32).to(device)
+
+#Rescales the dataset according to the training set
+scaler_targets = MinMaxScaler()
+scaler_targets.fit(targets[:training_index,:])
+scaler_targets.scale_ /= 1.25
+targets = torch.tensor(scaler_targets.transform(targets)).to(torch.float32).to(device)
 
 #Decide the training portion of the dataset
 training_portion =  0.8
 training_index = int( training_portion * len(dataset))
 
-#Rescales the dataset according to the training set
-rescaled_Xs, max_T = scale_feature_matrix(dataset, training_index)
-rescaled_Ys = scale_targets(dataset, training_index)
-for i,data in enumerate(dataset):
-        dataset[i].x = rescaled_Xs[i].to(torch.float32).to(device)
-        dataset[i].y = rescaled_Ys[i].to(torch.float32).to(device)
-
-# Identify feautures and targets and reshape them correctly
-features = [dataset[i].x[0] for i in range(len(dataset))]
-targets = [dataset[i].y[0] for i in range(len(dataset))]
-features = torch.stack(features)
-targets = torch.tensor(targets)
-targets = targets.reshape(-1,1)
-
-
-#Create the seed0 CIR process and B_t process be carefull i have to take CIR[:-1] because i cannot use the last point in the future :
-CIRProcess = sim.CIRProcess[:-1]
+#Create the seed0 CIR process and B_t process :
+CIRProcess = sim.CIRProcess[:364]
 B_t = np.asarray([np.prod(1+(CIRProcess[0:t]*1/365)) for t in range(1,len(CIRProcess)+1)])
+CIRProcess = sim.CIRProcess[:365]
 CIRProcess = torch.tensor(CIRProcess.reshape(-1,1)).to(torch.float32)
 B_t = torch.tensor(B_t.reshape(-1,1)).to(torch.float32)
-time = torch.arange(CIRProcess.shape[0]).reshape(-1,1).to(torch.float32).to(device) / (training_index*1.25)
-
+time = torch.arange(B_t.shape[0]).reshape(-1,1).to(torch.float32).to(device) / training_index
 
 #Normalize the two processes
 
-scaler_CIR = StandardScaler()#MinMaxScaler()
+scaler_CIR = StandardScaler()
 scaler_CIR.fit(CIRProcess[0:training_index].reshape(-1,1))
 scaler_CIR.scale_ *= 1.25
-CIRProcess = torch.tensor(scaler_CIR.transform(CIRProcess.reshape(-1,1))).to(device)
+CIRProcess = torch.tensor(scaler_CIR.transform(CIRProcess.reshape(-1,1))).to(torch.float32).to(device)
 
-scaler_Bt = StandardScaler()#MinMaxScaler()
+scaler_Bt = StandardScaler()
 scaler_Bt.fit(B_t[0:training_index].reshape(-1,1))
 scaler_Bt.scale_ *= 1.25
-B_t = torch.tensor(scaler_Bt.transform(B_t.reshape(-1,1))).to(device)
+B_t = torch.tensor(scaler_Bt.transform(B_t.reshape(-1,1))).to(torch.float32).to(device)
 
+#Uncomment to see how data is normalized:
 # plt.figure(figsize=(10,10), dpi=300)
 # plt.subplot(4,4,1)
 # plt.hist(CIRProcess.cpu().squeeze(), bins=150, density=True)
@@ -325,114 +372,51 @@ B_t = torch.tensor(scaler_Bt.transform(B_t.reshape(-1,1))).to(device)
 # plt.tight_layout()
 # plt.savefig('NormalizationCheck.pdf')
 
-
 #Concat in the data matrix, Targets is not actually useful but im gonna keep it for the moment
-X_data = torch.cat([features, time, B_t], axis = 1).to(device)
-print('X_data.shape: ', X_data.shape)
+X_data = torch.cat([features[:-1, :], time, B_t], axis = 1).to(device)
 
 # Create train and test sets
 train, CIR_train, targets_train = X_data[:training_index,:], CIRProcess[:training_index], targets[:training_index]
 test, CIR_test, targets_test = X_data[training_index:,:], CIRProcess[training_index:], targets[training_index:]
 
-#Create windows ALL-SEQUENCE
-"""
-Each training window contains features[t - T, t], targets[t - T + 1, t + 1], CIRProcess[t - T + 1 , t + 1 ]
-"""
-
-lookback = 100
+#Create the windows of data for training
+lookback = 15
 X_train, y_train, r_train = create_dataset_all_sequence(train, CIR_train, targets_train, lookback=lookback)
 X_test, y_test, r_test = create_dataset_all_sequence(test, CIR_test, targets_test, lookback=lookback)
 
-#Instantiate model
-all_squence_model = AllSequenceModel(input_size=X_train.shape[2], hidden_size=128, num_layers=1, out_shape=lookback).to(device)
+print(f'Training: X {X_train.shape}, r: {r_train.shape}, y:{y_train.shape}')
+print(f'Test X {X_test.shape}, r: {r_test.shape}, y:{y_test.shape}')
 
-optimizer = optim.Adam(all_squence_model.parameters())
-loss_fn = nn.MSELoss()
-
-# learning_rate = 0.01 #0.001 lr
-# input_size = X_train.shape[2] #number of features
-# hidden_size = 216 #number of features in hidden state
-# num_layers = 1 #number of stacked lstm layers
-# linear_witdh = 128
-# conditioning = True
-
-# model1= Model1(input_size, hidden_size, num_layers, linear_witdh).to(device)
-
-# criterion = torch.nn.MSELoss()    # mean-squared error for regression
-# optimizer = torch.optim.Adam(model1.parameters(), lr=learning_rate) 
-
-
-
+#Create the batch loader
 torch.manual_seed(0)
-loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(X_train, y_train, r_train), shuffle=False, batch_size=32)
-loader_test = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(X_test, y_test, r_test), shuffle=False, batch_size=32)
+loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(X_train.to(device), y_train.to(device), r_train.to(device)), shuffle=False, batch_size=64)
+loader_test = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(X_test.to(device), y_test.to(device), r_test.to(device)), shuffle=False, batch_size = 64)
 
-# perfect_prediction_model = PerfectPrediction(nodes=num_nodes, years=years, gamma=gamma)
+#training parameters
+num_epochs = 100 #1000 epochs
+learning_rate = 0.001 #0.001 lr
 
-# predictions = []
-# labels = []
+input_size = X_train.shape[2] #number of features
+hidden_size = 32 #number of features in hidden state
+num_layers = 2 #number of stacked lstm layers
+linear_witdh = 256
 
-# i = 0
+#all_sequence_model = AllSequenceModel(input_size, hidden_size, num_layers).to(device)
+model1= Model1(input_size, hidden_size, num_layers, linear_witdh).to(device)
 
-# mt_pred = []
-# m_t_label = []
+criterion = torch.nn.MSELoss(reduction='mean')    # mean-squared error for regression
+optimizer = torch.optim.Adam(model1.parameters(), lr=learning_rate) 
 
-# loop = tqdm(loader)
-
-# for X_batch, y_batch, r_batch in loop:
-
-    
-#     for j in range(y_batch.shape[0]):
-#         mt_pred.append(perfect_prediction_model.GetVt(X_batch,r_batch)[j].item())
-#         m_t_label.append(y_batch[j,-1,0].item())
-
-#     i+=1
-    
-
-# plt.figure(figsize=(10,8), dpi=200)
-# plt.title('Perfect prediction', fontsize=16)
-# plt.plot(mt_pred[2000:2200], label='PerfectPred')
-# plt.plot(m_t_label[2000:2200], label='FromData')
-# plt.legend(fontsize=14)
-# plt.ylabel('$M(t+1)$', fontsize=14)
-# plt.grid()
-# plt.tight_layout()
-# plt.savefig('PerfectPrediction_train.pdf')
-
-# mt_pred = []
-# m_t_label = []
-
-# loop2 = loader_test
-
-# for X_batch, y_batch, r_batch in loop2:
-
-#     #print(y_batch[-1,0])
-#     #print(f'model: {perfect_prediction_model.GetVt(X_batch,r_batch)}, label: {y_batch[:,-1,0]}')
-#     for j in range(y_batch.shape[0]):
-#         mt_pred.append(perfect_prediction_model.GetVt(X_batch,r_batch)[j].item())
-#         m_t_label.append(y_batch[j,-1,0].item())
-
-#     i+=1
-    
-
-# plt.figure(figsize=(10,8), dpi=200)
-# plt.title('Perfect prediction', fontsize=16)
-# plt.plot(mt_pred[1000:1400], label='PerfectPred')
-# plt.plot(m_t_label[1000:1400], label='FromData')
-# plt.legend(fontsize=14)
-# plt.ylabel('$M(t+1)$', fontsize=14)
-# plt.grid()
-# plt.tight_layout()
-# plt.savefig('PerfectPrediction_test.pdf')
-
-# print('DONE')
-
-# raise NotImplementedError
-
-num_epochs = 100
-
+"""
+Training routine
+"""
 train_loss = []
 val_loss = []
+
+#Early stopping parameters
+best_val_loss = float('inf')  # Initialize with a large value
+patience = 15  # Number of consecutive epochs to wait for improvement
+counter = 0  # Counter for consecutive epochs without improvement
 
 loop = tqdm(range(num_epochs), desc='Epoch')
 for epoch in loop:
@@ -443,96 +427,42 @@ for epoch in loop:
     
     for X_batch, y_batch, r_batch in loader:
 
-        y_pred = model1.forward(X_batch, r_batch, conditioning=conditioning) #forward pass
+        y_pred = model1.forward(X_batch, r_batch, conditioning=True) #forward pass
         optimizer.zero_grad() #caluclate the gradient, manually setting to 0
+
         loss = criterion(y_pred, y_batch[:,-1,:])
         temp_loss_train += loss.item()
         loss.backward() #calculates the loss of the loss function
         optimizer.step() 
 
+    #Validation
     model1.eval()
     with torch.no_grad():
         for X_batch, y_batch, r_batch in loader_test:
     
-            y_pred = model1.forward(X_batch, r_batch, conditioning=conditioning) #forward pass
+            y_pred =  model1.forward(X_batch, r_batch, conditioning=True)
             loss = criterion(y_pred, y_batch[:,-1,:])
-            
             temp_loss_val += loss.item()
 
     train_loss.append(temp_loss_train/len(loader))
     val_loss.append(temp_loss_val/len(loader_test))
+    
+    # Early stopping
+    if val_loss[-1] < best_val_loss:
+        best_val_loss = val_loss[-1]
+        counter = 0
+    else:
+        counter += 1
+    if counter >= patience:
+        print(f"Early stopping at epoch {epoch}. Best Validation RMSE: {np.sqrt(best_val_loss)}")
+        break
+        
     loop.set_postfix(loss = train_loss[-1], val_loss = val_loss[-1])
 
-# RMSE_training, RMSE_validation = [], []
+#Perform prediction after training:
+train_pred, train_label, test_pred, test_label= predict(model1, loader, loader_test, conditioning=True)
 
-# for epoch in range(n_epochs):
-#     model1.train()
-
-#     loop = tqdm(loader, desc=f'Training epoch {epoch+1}')
-
-#     epoch_rmse_training = []
-
-#     for X_batch, y_batch, r_batch in loop:
-    
-#         y_pred = all_squence_model(X_batch, r_batch)
-#         loss = loss_fn(y_pred, y_batch)
-#         loop.set_postfix(loss=torch.sqrt(loss).item())
-#         epoch_rmse_training.append(torch.sqrt(loss).item())
-#         optimizer.zero_grad()
-#         loss.backward()
-#         optimizer.step()
-
-#     print(f'Epoch {epoch+1}: training RMSE = {np.sum(epoch_rmse_training) / len(loop)}')
-#     RMSE_training.append(np.sum(epoch_rmse_training) / len(loop))
-
-#     # Validation
-#     # if epoch % 10 != 0:
-#     #     continue
-#     all_squence_model.eval()
-#     with torch.no_grad():
-#         loop = tqdm(loader_test, desc='Validation')
-#         epoch_rmse_test = []
-#         for X_batch, y_batch, r_batch in loop:
-
-#             y_pred = all_squence_model(X_batch, r_batch)
-#             loss = loss_fn(y_pred, y_batch)
-#             loop.set_postfix(loss=torch.sqrt(loss).item())
-#             epoch_rmse_test.append(torch.sqrt(loss).item())
-
-#         print(f'Epoch {epoch+1}: validation RMSE = {np.sum(epoch_rmse_test) / len(loop)}')
-#         RMSE_validation.append(np.sum(epoch_rmse_test) / len(loop))
-
-# print('Targets mean: ', targets.mean())
-
-
-torch.save(model1.state_dict(), "./results/model_standard_time_scalbatch256_2layer_400look.pth")
-
-plt.figure()
-plt.title(f'AllSequenceModel N={lookback}')
-plt.plot(train_loss, label='Training')
-plt.plot(val_loss, label = 'Validation')
-plt.ylabel('RMSE')
-plt.xlabel('Epoch')
-plt.legend()
-plt.grid()
-plt.tight_layout()
-plt.savefig('RMSE_standard_time_scalbatch256_2layer_400look.pdf')
-
-plt.figure(dpi=300)
-# with torch.no_grad():
-#     # shift train predictions for plotting
-#     train_plot = np.ones_like(targets.cpu()) * np.nan
-#     train_plot[lookback:training_index] = all_squence_model(X_train, r_train)[:, -1, :].cpu()
-#     # shift test predictions for plotting
-#     test_plot = np.ones_like(targets.cpu()) * np.nan
-#     test_plot[training_index+lookback:] = all_squence_model(X_test, r_test)[:, -1, :].cpu()
-# plot
-# plt.plot(targets.cpu(), c='tab:blue', label='Labels')
-# plt.axhline(targets.mean().cpu())
-# plt.plot(train_plot, c='r',lw=1, label='Training')
-# plt.plot(test_plot, c='g', label='Test')
-train_pred, train_label, test_pred, test_label= predict(model1, loader, loader_test, conditioning=conditioning)
-
+#Visualize them:
 plt.figure(figsize=(8,6), dpi=300)
 plt.subplot(2,1,1)
 plt.plot(test_pred.cpu(), label='Prediction')
@@ -548,8 +478,5 @@ plt.plot(train_label.cpu(), label='Ground truth')
 plt.legend(fontsize=14)
 plt.grid()
 
-# plt.xlim(200,600)
-# plt.grid()
-# plt.legend()
-# plt.tight_layout()
-plt.savefig('PRediction_standard_time_scalbatch256_2layer_400look.pdf')
+plt.tight_layout()
+plt.show()
