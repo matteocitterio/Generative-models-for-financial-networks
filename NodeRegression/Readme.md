@@ -10,3 +10,8 @@ This folder contains the code for predicting the Margin Value of a financial net
 - `CIR.py`: for simulating the Cox-Ingersoll-Ross process
 - `get_price_matrix.py`: computes a matrix with entrances $p(t,T)$ using a MonteCarlo simulation so that it doesn't compute an MC expectation every time the price function is called.
 - `PriceMatrix_Duffie.npy`: Matrix of prices computed through a MC simulation (see `get_price_matrix.py`) using the CIR parameters found in Duffie et al.
+
+## Margin prediction
+- `Analytic_model.py`: contains a class `PerfectPredition` that performs the reconstruction of $M(t)$ given the contracts and the other quantities. This was used to check whether all the information was passed in the proper way
+- `MarginPrediction.py`: performs the prediction of the Margin value M^{i}(t) for a single node
+- `PredictingPrice.py`: performs the prediction of p(t,T) using the CIR process r(t). This was used to see whether the model is able of learning the expectation of the process.
