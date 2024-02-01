@@ -10,8 +10,9 @@ v_0 = 0.04
 years = 20
 
 # This has a fixed seed
-sim = Simulation(alpha, b, sigma, v_0, years, seed=True)
+sim = Simulation(alpha, b, sigma, v_0, years, seed=True, seed_number = 0)
 
+#Shape: [days of the simulation horizon, 365 (Maximum maturity)]
 PriceMatrix = np.zeros((sim.TotPoints, 365))
 
 loop = tqdm(range(sim.TotPoints), desc='t')
@@ -24,4 +25,4 @@ for i in loop:
         loop.set_postfix(j=j)
         PriceMatrix[t,j] = sim.MontecarloPrice(t, t + j, n_samples=10000)
 
-np.save('/u/mcitterio/data/PriceMatrix_Duffie_diecimila.npy', PriceMatrix)
+np.save('./PriceMatrix_Duffie_diecimila.npy', PriceMatrix)
