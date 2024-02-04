@@ -40,17 +40,17 @@ class Simulation:
         #Number of the points of time time grid
         self.TotPoints = int(years * 365)
 
-        #Default Cox-process coefficients for the arrival times process:
+        #Default Cox-process coefficients:
         self.eta = - 4
         self.theta = 80
         self.gamma = gamma
-        
-        #This matrix contains all the p(t,T) computed for the case seed=0, and CIR parameters taken from Duffie et al.
-        self.PriceMatrix = np.load('./PriceMatrix_Duffie.npy')
+        #This matrix contains all the p(t,T) computed for the case seed=0, speeds up simulation a lot
+        self.PriceMatrix = np.load('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy')
+        self.time_grid = np.linspace(0., years, 365*years)
 
         #This is the reference interest rate we take for the entire simulation and all edges
         self.CIRProcess = get_CIR(
-            np.linspace(0.,1., self.TotPoints),
+            self.time_grid,
             self.alpha,
             self.b,
             self.sigma,
@@ -64,7 +64,6 @@ class Simulation:
 
         #Number of nodes in the graph
         self.num_nodes = num_nodes
-        
         #Matrix that will contain all the historical records of the transactions between (i,j)
         self.E = np.zeros((self.num_nodes, self.num_nodes), dtype=dict)
 
@@ -89,43 +88,40 @@ class Simulation:
         return self.PriceMatrix[t, T - t]
 
     def MontecarloPrice(self, t, T, n_samples = 1000):
-        """
-        Performs Montecarlo simulation of CIR, generating `n_samples` paths and then computes expectation out of it from 
-        which we can get the bond price at time t with maturity at time T
+         """
+         Performs Montecarlo simulation of CIR, generating `n_samples` paths and then computes expectation out of it from 
+         which we can get the bond price at time t with maturity at time T
 
-        Parameters
-        -----------
-        - t : `int`
-           Current time at which we want to know the bond price
-        - T : `int`
-           Maturity of the bond contract
-        - n_samples : `int` (default : 10 000)
-           Number of paths to generate for the computing the MC expectation
-        Returns
-        -------
-        - P : `float`
-           Price of the bond at time t with maturity T (p(t,T))
-        """
+         Parameters
+         -----------
+         - t : `int`
+            Current time at which we want to know the bond price
+         - T : `int`
+            Maturity of the bond contract
+         - n_samples : `int` (default : 10 000)
+            Number of paths to generate for the computing the MC expectation
+         Returns
+         -------
+         - P : `float`
+            Price of the bond at time t with maturity T (p(t,T))
+         """
 
-        if t == T:
-            # By definition, p(t,t) = 1 \forall t
-            return 1
+         if t == T:
+               # By definition, p(t,t) = 1 \forall t
+               return 1
 
-        #Firstly we generate the paths
-        paths = get_CIR(
-            np.linspace( t  / self.TotPoints, T / self.TotPoints, T - t + 1),
-            self.alpha,
-            self.b,
-            self.sigma,
-            self.CIRProcess[t],
-            n_samples = n_samples,
-        )
-        
-        #Then for each path we compute the integral approximation in discrete-time using the productory
-        prod = np.prod(1+(paths*1/365), axis=1)
-        expectation = np.average(1/prod)
-        
-        return expectation
+         # Monte Carlo simulations
+         MC_sims = get_CIR(self.time_grid[t:T+1],
+                                 self.alpha,
+                                 self.b,
+                                 self.sigma,
+                                 self.CIRProcess[t],
+                                 n_samples = n_samples,
+                                 seed = True,
+                                 seed_number=0)
+         
+         prod = np.prod(1+MC_sims*(1./365), axis=1)
+         return np.mean(prod**(-1))
 
     def SwapRate(self, t_0, T):
         """
@@ -263,7 +259,7 @@ class Simulation:
         - `float`
            Value of OIS contract for agent described by `delta` at time `t`
         """
-        
+        #As we are considering only active nodes i think there is no need for that
         if t > T or t<0 or t<t_0:
             return 0
 
@@ -307,13 +303,14 @@ class Simulation:
         deltas = np.random.choice ([-1,1], size = len(arrival_times))
 
         #Compute ending times like t_0 + T
-        ending_times = np.minimum(arrival_times + maturities, self.TotPoints)
-      
+        #ending_times = np.minimum(arrival_times + maturities, self.TotPoints)
+        ending_times = arrival_times + maturities
+
         try:
-            
         #Sometimes you don't have any contract between i and j
-            contracts_array_i = np.stack([arrival_times, deltas, ending_times, self.SwapRate(arrival_times, ending_times),np.asarray(([np.prod(1+(self.CIRProcess[0:t+1]*1/365)) for t in arrival_times])) ], axis =1) 
-            contracts_array_j = np.stack([arrival_times, -1 * deltas, ending_times, self.SwapRate(arrival_times, ending_times), np.asarray(([np.prod(1+(self.CIRProcess[0:t+1]*1/365)) for t in arrival_times])) ], axis = 1)
+            
+            contracts_array_i = np.stack([arrival_times, ending_times, deltas, self.SwapRate(arrival_times, ending_times),np.asarray(([np.prod(1+(self.CIRProcess[0:t]*1/365)) for t in arrival_times])) ], axis =1) 
+            contracts_array_j = np.stack([arrival_times, ending_times,-1 * deltas, self.SwapRate(arrival_times, ending_times), np.asarray(([np.prod(1+(self.CIRProcess[0:t]*1/365)) for t in arrival_times])) ], axis = 1)
 
             # Convert specific columns to integers
             contracts_array_i[:, :2] = contracts_array_i[:, :2].astype(int)
@@ -327,8 +324,124 @@ class Simulation:
             }
         
         except:
-            # No contracts between i and j
             pass
+
+    def GetEdgeValue(self,i,j):
+        """
+        It retrieves the value process for the edge (i,j)
+
+        Parameters
+        -----------
+        - i : `int`
+           One of the node in the edge (i,j)
+        - j : `int`
+           The other node in the edge (i,j)
+
+        Returns
+        --------
+        - np.array(float)
+           Value process for edge (i,j); i.e. V^{ij}(t) = \sum_k V_k^{ij}(t)
+        """
+
+        #Initiate an empty array
+        value = np.zeros((self.TotPoints))
+
+        try:
+
+            #We could have 0 contracts on the edge
+            temp_cont = self.E[i,j]['contracts']
+
+            #Retrieve the contracts
+            for con in temp_cont:
+    
+                #I need to convert the times into integers
+                contract = con[0:3].astype(int)
+                value += np.asarray([self.MarkToMarketPrice(delta = contract[1], t_0 = contract[0], t = t, T = contract[2]) for t in range(0, self.TotPoints)])
+        except:
+            pass
+        
+        return value
+
+    def GetNodeValue(self, node):
+        """
+        It retrieves the value process for node i by netting over edges (i,j)
+
+        Parameters
+        -----------
+        - node : `int`
+           Considered ndoe
+
+        Returns
+        --------
+        - np.array(float)
+           Value process for node `node`; i.e. V^i(t) = \sum_j {\sum_k V_k^{ij}(t)}
+        """
+        value = np.zeros((self.TotPoints))
+        for i in range(0,self.num_nodes):
+            if i == node:
+                pass
+            else:
+                value += self.GetEdgeValue(node, i)
+        return value
+
+    def GetEdgeBalance(self, i, j):
+        """
+        It retrieves the cash-flow process for the edge (i,j)
+
+        Parameters
+        -----------
+        - i : `int`
+           One of the node in the edge (i,j)
+        - j : `int`
+           The other node in the edge (i,j)
+
+        Returns
+        -------
+        - np.array(float)
+          The edge balance process
+        """
+        
+        
+        cashflows = np.zeros((self.TotPoints))
+
+
+        try:
+            #We could have 0 contracts on the edge
+            temp_cont = self.E[i,j]['contracts']
+            
+            for cont in temp_cont:
+                #I need to convert the times into integers
+                contract = cont[0:3].astype(int)
+                cashflows[contract[2]:] += self.MarkToMarketPrice(delta = contract[1], t_0 = contract[0], t = contract[2], T = contract[2])
+        except:
+            pass
+        
+        return cashflows
+
+    def GetNodeBalance(self, i):
+        """
+        It retrieves the cash-flow process for the node i by netting over all the edges (i,j)
+
+        Parameters
+        -----------
+        - i : `int`
+           Considered node
+        Returns
+        -------
+        - np.array(float)
+          The node balance process
+        """
+
+        # Select all nodes except i
+        other_nodes = set(np.arange(self.num_nodes)) - set({i})
+
+        #Instantiate empty array
+        cashflows = np.zeros((self.TotPoints))
+
+        for j in other_nodes:
+            cashflows+= self.GetEdgeBalance(i,j)
+            
+        return cashflows
     
     def GetInstantContractValue(self, t, contract):
         """
@@ -348,8 +461,8 @@ class Simulation:
         """
         
         t_0 = int(contract[0])
-        delta = int(contract[1])
-        T = int(contract[2])
+        delta = int(contract[2])
+        T = int(contract[1])
 
         return self.MarkToMarketPrice(delta, t_0, t, T)
 
@@ -369,12 +482,19 @@ class Simulation:
         -------
         - float
            M_k^{ij}(t) of contract k
+           bababa
         """
-        
-        V_t = self.GetInstantContractValue(t+1, contract)
-        V_t_1 = self.GetInstantContractValue(t , contract)
 
-        return (V_t - (1 + (self.CIRProcess[t+1] * 1 / 365) ) * V_t_1)
+        V_t = self.GetInstantContractValue(t, contract)
+        V_t_1 = self.GetInstantContractValue(t - 1 , contract)
+      #   print('------------------------------------')
+      #   print('contract: ', contract)
+      #   print(f't={t}, V(t+1)={V_t}')
+      #   print(f't={t}, V(t)={V_t_1}')
+      #   print(f't={t}, M(t+1)={(V_t - (1 + (self.CIRProcess[t+1] * 1 / 365) ) * V_t_1)}')
+      #   print('-------------------------------------')
+
+        return (V_t - (1 + (self.CIRProcess[t] * 1 / 365) ) * V_t_1)
 
     def GetInstantEdgeMarginValue(self,i,j,t):
         """
@@ -408,6 +528,35 @@ class Simulation:
 
         return MarginValue
 
+    def GetMtForActiveEdges(self, edge_index, t):
+        """
+        Returns the margin matrix at time t
+        
+        Parameters
+        ----------
+        - edge_index : `torch.Tensor`
+           edge_index tensor in format coo such that it has shape (2, num_edges). Only edges with a contract at time t
+           are considered
+        - t : `int`
+           Time at which we evaluate the contract
+
+        Returns
+        -------
+        - torch.Tensor(float)
+           tensor of shape (num_edges, ) with entries M^{ij}(t)
+        """
+
+        Mt = torch.zeros((edge_index.shape[1]))
+
+        for h in range(edge_index.shape[1]):
+
+            edge = edge_index[:,h]
+            i = int(edge[0].item())
+            j = int(edge[1].item())
+            Mt[h] = self.GetInstantEdgeMarginValue(i, j, t)
+
+        return Mt
+
     def GetMtForNode(self, node_i, edge_index_at_time_t, t):
         """
         Returns the instant margin for node i, given the set of active edges is has at time t
@@ -439,9 +588,6 @@ class Simulation:
             M_i_t += self.GetInstantEdgeMarginValue(node_i.cpu(), j.cpu(), t)
 
         return M_i_t
-
-######################################################
-#Some utils:
     
 def GetActiveContractsIndices(sim, contracts):
     """
@@ -469,9 +615,9 @@ def GetActiveContractsIndices(sim, contracts):
 
         loop.set_postfix(Time=t)
         #Find the contracts that began in the past or at actual time
-        formed_contract_indices = (time_array <= t).nonzero(as_tuple = True)[0]
+        formed_contract_indices = (time_array + 2 <= t).nonzero(as_tuple = True)[0]
         #Find the contracts whose maturity hasn't yet exceeded
-        not_yet_expired_contract_indices = (maturity_array>=t).nonzero(as_tuple = True)[0]
+        not_yet_expired_contract_indices = (maturity_array >= t).nonzero(as_tuple = True)[0]
         #Find the alive contracts
         alive_contract_indices = np.intersect1d(formed_contract_indices.cpu(), not_yet_expired_contract_indices.cpu())
 
@@ -523,8 +669,8 @@ def GetSimulationQuantitiesTensors(simulation, device):
                     src_list.append(i)
                     dst_list.append(j)
                     time_list.append(contract_row[0])
-                    delta_list.append(contract_row[1])
-                    maturity_list.append(contract_row[2])
+                    delta_list.append(contract_row[2])
+                    maturity_list.append(contract_row[1])
                     swaprate_list.append(contract_row[3])
                     B_t_0_list.append(contract_row[4])
 
@@ -570,3 +716,81 @@ def return_max_num_contracts(contracts, active_contracts_indices):
              max_counts.append(maxCounts)
 
    return np.max(np.asarray(max_counts))
+
+def scale_feature_matrix(dataset):
+    """
+    Scales the feature matrix's feautures according to their type
+    """
+    #Get the maximum number of contracts
+    num_contracts = int(dataset[0].x.shape[1]/3)
+    num_nodes = dataset[0].x.shape[0]
+
+    #Combine all the feature matrices by stacking them vertically
+    combined_array = np.vstack([tensor.x.cpu().numpy() for tensor in dataset])
+
+    #Now slice them in 3 by 3, so that for every row we only have a contract
+    combined_of_combined = np.vstack([combined_array[:, 0 + (i*3): 3 + (i*3)] for i in range(num_contracts)])
+
+    # Initialize the MinMaxScaler
+    scaler = MinMaxScaler()
+
+    # Fit the scaler on the combined data and transform it
+    scaled_array = scaler.fit_transform(combined_of_combined)
+
+    # splits the vertical stack into a list of num_contracts elements
+    pre_scaled_tensors = np.split(scaled_array, num_contracts, axis=0)
+    #In order to recover the original tensor we need to stack horizontally the list's elements
+    finally_tensors = torch.hstack([torch.tensor(pre_scaled_tensors[i]) for i in range(num_contracts)])
+
+    #The last step is revert the first vertical stacking as well:
+
+    scaled_tensors = [finally_tensors[0 + i*num_nodes :num_nodes + i*num_nodes].squeeze() for i in range(len(dataset))]
+    return scaled_tensors
+
+def scale_matrix(X):
+    """
+    Scales the feature matrix's feautures according to its type
+    """
+    #Get the maximum number of contracts
+    num_contracts = int(X.shape[1]/3)
+    num_nodes = X.shape[0]
+
+    #Now slice them in 3 by 3, so that for every row we only have a contract
+    combined_array = np.vstack([X[:, 0 + (i*3): 3 + (i*3)] for i in range(num_contracts)])
+
+    # Initialize the MinMaxScaler
+    scaler = MinMaxScaler()
+
+    # Fit the scaler on the combined data and transform it
+    scaled_array = scaler.fit_transform(combined_array)
+
+    # splits the vertical stack into a list of num_contracts elements
+    pre_scaled_tensors = np.split(scaled_array, num_contracts, axis=0)
+    #In order to recover the original tensor we need to stack horizontally the list's elements
+    finally_tensors = torch.hstack([torch.tensor(pre_scaled_tensors[i]) for i in range(num_contracts)])
+
+    return finally_tensors
+
+def scale_targets(dataset):
+    """
+    This one does the scaling for targets y
+    """
+    
+    #Get the maximum number of contracts
+    num_days = len(dataset)
+
+    #Combine all the feature matrices by stacking them vertically
+    combined_array = np.vstack([tensor.y.view(-1,1).cpu().numpy() for tensor in dataset])
+
+    # Initialize the MinMaxScaler
+    scaler = MinMaxScaler()
+
+    # Fit the scaler on the combined data and transform it
+    scaled_array = scaler.fit_transform(combined_array)
+
+    # splits the vertical stack into a list of num_contracts elements
+    pre_scaled_tensors = np.split(scaled_array, num_days, axis=0)
+    #In order to recover the original tensor we need to stack horizontally the list's elements
+    finally_tensors = [torch.tensor(pre_scaled_tensors[i]).squeeze() for i in range(num_days)]
+
+    return finally_tensors, scaler

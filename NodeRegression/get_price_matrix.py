@@ -4,25 +4,27 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 alpha = 0.6
-b = 0.02
+b = 0.04
 sigma = 0.14
 v_0 = 0.04
 years = 20
 
 # This has a fixed seed
-sim = Simulation(alpha, b, sigma, v_0, years, seed=True, seed_number = 0)
+sim = Simulation(alpha, b, sigma, v_0, years, seed=True)
 
-#Shape: [days of the simulation horizon, 365 (Maximum maturity)]
-PriceMatrix = np.zeros((sim.TotPoints, 365))
-
-loop = tqdm(range(sim.TotPoints), desc='t')
+PriceMatrix = np.zeros((sim.TotPoints - 365, 365))
+print(PriceMatrix.shape)
+loop = tqdm(range(sim.TotPoints - 365), desc='t')
 
 for i in loop:
 
     t = i
+    price = np.ones((365))
 
-    for j in range(365):
+    for j in range(1,365):
         loop.set_postfix(j=j)
-        PriceMatrix[t,j] = sim.MontecarloPrice(t, t + j, n_samples=10000)
+        price[j] = sim.MontecarloPrice(t, t + j, n_samples=1000)
 
-np.save('./PriceMatrix_Duffie_diecimila.npy', PriceMatrix)
+    PriceMatrix[t] = price
+
+np.save('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy', PriceMatrix)
