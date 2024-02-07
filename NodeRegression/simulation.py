@@ -111,6 +111,11 @@ class Simulation:
                return 1
 
          # Monte Carlo simulations
+         #NB in numpy.prod l'estremo di desta non è incluso nella produttoria quindi se voglia t<=T dobbiamo prendere
+         #fino a T+1
+         #NB l'estremo di sinistra è invece incluso. Nel calcolo di B_t lo vogliamo prendere incluso dal momento che 
+         #poi con il rapporto il t_0 si cancella ma nel calcolo diretto di p(t_0, T) non lo vogliamo quindi prendiamo
+         #anche qui t+1 s.t. we get t_0 < t <=T
          MC_sims = get_CIR(self.time_grid[t:T+1],
                                  self.alpha,
                                  self.b,
@@ -120,7 +125,7 @@ class Simulation:
                                  seed = True,
                                  seed_number=0)
          
-         prod = np.prod(1+MC_sims*(1./365), axis=1)
+         prod = np.prod(1+MC_sims[1:]*(1./365), axis=1)
          return np.mean(prod**(-1))
 
     def SwapRate(self, t_0, T):
@@ -231,6 +236,8 @@ class Simulation:
         - `float`
            Value of the floating leg process at time t
         """
+        #Qui è corretto prendere t_0+1 perchè vogliamo fare il prodotto 0<= t <= t_0 poi facendone il rapporto
+        #t_0 si semplifica
         B_t_0 = np.prod(1+(self.CIRProcess[0:t_0+1]*1/365))
         B_t = np.prod(1+(self.CIRProcess[0:t+1]*1/365))
         
@@ -309,8 +316,12 @@ class Simulation:
         try:
         #Sometimes you don't have any contract between i and j
             
-            contracts_array_i = np.stack([arrival_times, ending_times, deltas, self.SwapRate(arrival_times, ending_times),np.asarray(([np.prod(1+(self.CIRProcess[0:t]*1/365)) for t in arrival_times])) ], axis =1) 
-            contracts_array_j = np.stack([arrival_times, ending_times,-1 * deltas, self.SwapRate(arrival_times, ending_times), np.asarray(([np.prod(1+(self.CIRProcess[0:t]*1/365)) for t in arrival_times])) ], axis = 1)
+            #Anche qui per lo stesso motivo di Floatingleg prendiamo in B_t_0 fino a t+1
+            swap_rates = self.SwapRate(arrival_times, ending_times)
+            B_t_0s = np.asarray(([np.prod(1+(self.CIRProcess[0:t+1]*1/365)) for t in arrival_times]))
+
+            contracts_array_i = np.stack([arrival_times, ending_times, deltas, swap_rates, B_t_0s], axis =1) 
+            contracts_array_j = np.stack([arrival_times, ending_times,-1 * deltas, swap_rates, B_t_0s], axis = 1)
 
             # Convert specific columns to integers
             contracts_array_i[:, :2] = contracts_array_i[:, :2].astype(int)
@@ -325,123 +336,6 @@ class Simulation:
         
         except:
             pass
-
-    def GetEdgeValue(self,i,j):
-        """
-        It retrieves the value process for the edge (i,j)
-
-        Parameters
-        -----------
-        - i : `int`
-           One of the node in the edge (i,j)
-        - j : `int`
-           The other node in the edge (i,j)
-
-        Returns
-        --------
-        - np.array(float)
-           Value process for edge (i,j); i.e. V^{ij}(t) = \sum_k V_k^{ij}(t)
-        """
-
-        #Initiate an empty array
-        value = np.zeros((self.TotPoints))
-
-        try:
-
-            #We could have 0 contracts on the edge
-            temp_cont = self.E[i,j]['contracts']
-
-            #Retrieve the contracts
-            for con in temp_cont:
-    
-                #I need to convert the times into integers
-                contract = con[0:3].astype(int)
-                value += np.asarray([self.MarkToMarketPrice(delta = contract[1], t_0 = contract[0], t = t, T = contract[2]) for t in range(0, self.TotPoints)])
-        except:
-            pass
-        
-        return value
-
-    def GetNodeValue(self, node):
-        """
-        It retrieves the value process for node i by netting over edges (i,j)
-
-        Parameters
-        -----------
-        - node : `int`
-           Considered ndoe
-
-        Returns
-        --------
-        - np.array(float)
-           Value process for node `node`; i.e. V^i(t) = \sum_j {\sum_k V_k^{ij}(t)}
-        """
-        value = np.zeros((self.TotPoints))
-        for i in range(0,self.num_nodes):
-            if i == node:
-                pass
-            else:
-                value += self.GetEdgeValue(node, i)
-        return value
-
-    def GetEdgeBalance(self, i, j):
-        """
-        It retrieves the cash-flow process for the edge (i,j)
-
-        Parameters
-        -----------
-        - i : `int`
-           One of the node in the edge (i,j)
-        - j : `int`
-           The other node in the edge (i,j)
-
-        Returns
-        -------
-        - np.array(float)
-          The edge balance process
-        """
-        
-        
-        cashflows = np.zeros((self.TotPoints))
-
-
-        try:
-            #We could have 0 contracts on the edge
-            temp_cont = self.E[i,j]['contracts']
-            
-            for cont in temp_cont:
-                #I need to convert the times into integers
-                contract = cont[0:3].astype(int)
-                cashflows[contract[2]:] += self.MarkToMarketPrice(delta = contract[1], t_0 = contract[0], t = contract[2], T = contract[2])
-        except:
-            pass
-        
-        return cashflows
-
-    def GetNodeBalance(self, i):
-        """
-        It retrieves the cash-flow process for the node i by netting over all the edges (i,j)
-
-        Parameters
-        -----------
-        - i : `int`
-           Considered node
-        Returns
-        -------
-        - np.array(float)
-          The node balance process
-        """
-
-        # Select all nodes except i
-        other_nodes = set(np.arange(self.num_nodes)) - set({i})
-
-        #Instantiate empty array
-        cashflows = np.zeros((self.TotPoints))
-
-        for j in other_nodes:
-            cashflows+= self.GetEdgeBalance(i,j)
-            
-        return cashflows
     
     def GetInstantContractValue(self, t, contract):
         """
@@ -461,8 +355,8 @@ class Simulation:
         """
         
         t_0 = int(contract[0])
-        delta = int(contract[2])
         T = int(contract[1])
+        delta = int(contract[2])
 
         return self.MarkToMarketPrice(delta, t_0, t, T)
 
@@ -487,12 +381,18 @@ class Simulation:
 
         V_t = self.GetInstantContractValue(t, contract)
         V_t_1 = self.GetInstantContractValue(t - 1 , contract)
-      #   print('------------------------------------')
-      #   print('contract: ', contract)
-      #   print(f't={t}, V(t+1)={V_t}')
-      #   print(f't={t}, V(t)={V_t_1}')
-      #   print(f't={t}, M(t+1)={(V_t - (1 + (self.CIRProcess[t+1] * 1 / 365) ) * V_t_1)}')
-      #   print('-------------------------------------')
+      #   if t==1954 or t==1955:
+      #            print('\n INSIDE MT for contract')
+      #            print('t: ',t)
+      #            print('------------------------------------')
+      #            print('contract: ', contract)
+      #            print(f't={t}, V(t)={V_t}')
+      #            print(f't={t}, V(t-1)={V_t_1}')
+      #            print(f't={t}, M(t)={(V_t - (1 + (self.CIRProcess[t] * 1 / 365) ) * V_t_1)}')
+      #            print('-------------------------------------')
+
+      #   if t == 1955:
+      #       raise NotImplementedError
 
         return (V_t - (1 + (self.CIRProcess[t] * 1 / 365) ) * V_t_1)
 
@@ -515,47 +415,45 @@ class Simulation:
            M^{ij}(t) of edge (i,j)
         """
 
+
         MarginValue = 0
         call = 0
 
+        #Ciclo su tutti i contratti anche quelli non attivi che mi daranno Mt = 0 ... un po' inefficiente
+        #Sopratutto fa edge per edge
         for cont in self.E[i,j]['contracts']:
 
             call+=1
-            #Remember that for non-valid contracts, MarkToMarketPrice returns 0
             MarginValue += self.GetInstantContractMarginValue(t,cont)
 
-      #   print('CALL: ',call)
-
         return MarginValue
-
-    def GetMtForActiveEdges(self, edge_index, t):
+    
+    def GetMtForNodeAtActiveContracts(self, active_contracts_for_node_i, t):
         """
-        Returns the margin matrix at time t
-        
-        Parameters
-        ----------
-        - edge_index : `torch.Tensor`
-           edge_index tensor in format coo such that it has shape (2, num_edges). Only edges with a contract at time t
-           are considered
+        Returns the instant margin for node i, given the set of active contracts
+
+        Params
+        -------
+        - active_contracts_for_node_i : `torch.Tensor`
+           tensor of contracts in the form (src, dst, t_0, T, delta, R, B_t_0)
+           represents the active contracts for node i
         - t : `int`
-           Time at which we evaluate the contract
+           time index
 
         Returns
-        -------
-        - torch.Tensor(float)
-           tensor of shape (num_edges, ) with entries M^{ij}(t)
+        --------
+        - M^i(t) : `float`
+           netted margin for node i at time t
         """
+        M_t = 0
 
-        Mt = torch.zeros((edge_index.shape[1]))
+        #Questo cicla solo su i contratti attivi, molto più efficiente
+        for j in range(active_contracts_for_node_i.shape[0]):
+            
+            M_t += self.GetInstantContractMarginValue(t, active_contracts_for_node_i[j,2:])
+         
+        return M_t
 
-        for h in range(edge_index.shape[1]):
-
-            edge = edge_index[:,h]
-            i = int(edge[0].item())
-            j = int(edge[1].item())
-            Mt[h] = self.GetInstantEdgeMarginValue(i, j, t)
-
-        return Mt
 
     def GetMtForNode(self, node_i, edge_index_at_time_t, t):
         """
@@ -615,13 +513,18 @@ def GetActiveContractsIndices(sim, contracts):
 
         loop.set_postfix(Time=t)
         #Find the contracts that began in the past or at actual time
-        formed_contract_indices = (time_array + 2 <= t).nonzero(as_tuple = True)[0]
+        formed_contract_indices = (time_array <= t).nonzero(as_tuple = True)[0]
         #Find the contracts whose maturity hasn't yet exceeded
         not_yet_expired_contract_indices = (maturity_array >= t).nonzero(as_tuple = True)[0]
         #Find the alive contracts
         alive_contract_indices = np.intersect1d(formed_contract_indices.cpu(), not_yet_expired_contract_indices.cpu())
 
         alive_indices_list.append(alive_contract_indices)
+      #   if t ==1954 or t==1955:
+      #       print('t: ',t)
+      #       print('Formed contract indices: ', formed_contract_indices)
+      #       print('not_yet expired: ', not_yet_expired_contract_indices)
+      #       print('Alive_contract: ', alive_contract_indices)
     
     return alive_indices_list
 
