@@ -44,8 +44,9 @@ class Simulation:
         self.eta = - 4
         self.theta = 80
         self.gamma = gamma
+        self.r_grid = np.linspace(0.0002, 0.157, 600)
         #This matrix contains all the p(t,T) computed for the case seed=0, speeds up simulation a lot
-        self.PriceMatrix = np.load('PriceMatrix_Duffie_Updated.npy')
+        self.PriceMatrix = np.load('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy')
         self.time_grid = np.linspace(0., years, 365*years)
 
         #This is the reference interest rate we take for the entire simulation and all edges
@@ -67,7 +68,7 @@ class Simulation:
         #Matrix that will contain all the historical records of the transactions between (i,j)
         self.E = np.zeros((self.num_nodes, self.num_nodes), dtype=dict)
 
-    def Price(self, t, T):
+    def Price(self, t, T, r=None):
         """
         Returns the bond price at time t with maturity at time T.
         This is actually based on simulations made for the CIR process with seed = 0
@@ -84,8 +85,13 @@ class Simulation:
         - P : `float`
            Price of the bond at time t with maturity T (p(t,T))
         """
+        tau = int(T-t)
 
-        return self.PriceMatrix[t, T - t]
+        if r == None:
+            r = self.CIRProcess[t]
+        
+        closest_index = np.argmin(np.abs(self.r_grid-r))
+        return self.PriceMatrix[closest_index, tau]
 
     def MontecarloPrice(self, t, T, n_samples = 1000):
          """
