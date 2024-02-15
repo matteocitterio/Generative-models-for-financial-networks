@@ -46,7 +46,7 @@ class Simulation:
         self.gamma = gamma
         self.r_grid = np.linspace(0.0002, 0.157, 600)
         #This matrix contains all the p(t,T) computed for the case seed=0, speeds up simulation a lot
-        self.PriceMatrix = np.load('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy')
+        self.PriceMatrix = np.load('PriceMatrix_Duffie_Updated.npy')
         self.time_grid = np.linspace(0., years, 365*years)
 
         #This is the reference interest rate we take for the entire simulation and all edges
