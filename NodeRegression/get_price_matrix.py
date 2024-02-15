@@ -18,7 +18,7 @@ grid = np.linspace(0., years, 365*years)
 
 
 r_grid = np.linspace(0.0001, 0.16,1200)
-PriceMatrix = np.zeros((1200, 365))
+PriceMatrix = np.zeros((1200, 366))
 n_samples = 1000
 
 
@@ -26,7 +26,7 @@ loop = tqdm(range(1200))
 
 for i in loop:
     
-    for tau in range(365):
+    for tau in range(366):
 
         loop.set_postfix(tau = tau)
         
