@@ -93,6 +93,25 @@ class Simulation:
         closest_index = np.argmin(np.abs(self.r_grid-r))
         return self.PriceMatrix[closest_index, tau]
 
+    def B(self, t):
+        """
+        Returns the money-market account value B_t at time t.
+        
+        Parameters
+        -----------
+        - t : `int`
+           Current time at which we want to know the bond price
+           
+        Returns
+        -------
+        - B_t : `float`
+           Price of the money-market account B_t at time t.
+        """
+
+        t = int(t)
+        B_t = np.prod(1. + self.CIRProcess[1:t+1]*(1/365.))
+        return B_t
+
     def MontecarloPrice(self, t, T, n_samples = 1000):
          """
          Performs Montecarlo simulation of CIR, generating `n_samples` paths and then computes expectation out of it from 
@@ -366,7 +385,6 @@ class Simulation:
 
         return self.MarkToMarketPrice(delta, t_0, t, T)
 
-
     def GetInstantContractMarginValue(self,t,contract):
         """
         Returns the instant Margin (M_k^ij(t)) of a specific contract
@@ -459,7 +477,6 @@ class Simulation:
             M_t += self.GetInstantContractMarginValue(t, active_contracts_for_node_i[j,2:])
          
         return M_t
-
 
     def GetMtForNode(self, node_i, edge_index_at_time_t, t):
         """
