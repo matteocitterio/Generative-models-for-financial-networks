@@ -725,10 +725,9 @@ class Contract:
 
     def get_contract_features(self, t):
         t = int(t)
-        contract = torch.tensor([(self.T - t)/365.,                                      # (T-t)/365
-                             np.log(self.sim.Price(self.t_0, self.T)),                   # p(t_0, T)
-                             np.log(self.sim.Price(t, self.T))])#,                       # p(t, T)
-                             #COMMENTED: FOCUS ON FIXED LEG
+        contract = torch.tensor([(self.T - t)/365.,                                       # (T-t)/365
+                                 np.log(self.sim.Price(self.t_0, self.T))])                # p(t_0, T)
+                           #   #COMMENTED: FOCUS ON FIXED LEG
                              #np.log(self.sim.B(self.t_0)),                               # B_t_0
                              #np.log(self.sim.B(t))])#,                                   # B_t
                              #self.sim.MarkToMarketPrice(1, self.t_0, t, self.T)])       # V(t)
