@@ -263,10 +263,8 @@ class Simulation:
         """
         #Qui è corretto prendere t_0+1 perchè vogliamo fare il prodotto 0<= t <= t_0 poi facendone il rapporto
         #t_0 si semplifica
-        B_t_0 = np.prod(1+(self.CIRProcess[0:t_0+1]*1/365))
-        B_t = np.prod(1+(self.CIRProcess[0:t+1]*1/365))
         
-        return notional * B_t / B_t_0
+        return notional * np.prod(1+(self.CIRProcess[t_0+1:t+1]*1/365))
 
     def MarkToMarketPrice(self, delta, t_0, t, T, notional = 1):
         """
