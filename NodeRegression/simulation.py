@@ -232,14 +232,8 @@ class Simulation:
         - `float`
            Value of the fixed leg process at time t
         """
-
-        K = self.SwapRate(t_0, T)
-        R = self.SwapRate(t, T)
         
-        tau_0 = (T-t_0) / 365
-        tau_t = (T-t) / 365
-        
-        return notional * ( (1 + K * tau_0) / (1 + R * tau_t)) 
+        return notional * (self.Price(t, T) / self.Price(t_0, T))
 
     def GetFloatingLeg(self, t_0, t, notional = 1):
         """
