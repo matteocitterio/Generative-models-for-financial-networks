@@ -263,7 +263,7 @@ class Simulation:
         """
         #Qui è corretto prendere t_0+1 perchè vogliamo fare il prodotto 0<= t <= t_0 poi facendone il rapporto
         #t_0 si semplifica
-        
+
         return notional * np.prod(1+(self.CIRProcess[t_0+1:t+1]*1/365))
 
     def MarkToMarketPrice(self, delta, t_0, t, T, notional = 1):
@@ -718,3 +718,31 @@ def scale_targets(dataset):
     finally_tensors = [torch.tensor(pre_scaled_tensors[i]).squeeze() for i in range(num_days)]
 
     return finally_tensors, scaler
+
+class Contract:
+
+    def __init__(self, t_0, sim):
+        # contract start time
+        self.t_0 = int(t_0)
+        # contract end time
+        self.T = self.t_0 + 365
+        self.delta = 1.
+        self.sim = sim
+
+    def get_contract_features(self, t):
+        t = int(t)
+        contract = torch.tensor([(self.T - t)/365.,                                      # (T-t)/365
+                             np.log(self.sim.Price(self.t_0, self.T)),                   # p(t_0, T)
+                             np.log(self.sim.Price(t, self.T))])#,                       # p(t, T)
+                             #COMMENTED: FOCUS ON FIXED LEG
+                             #np.log(self.sim.B(self.t_0)),                               # B_t_0
+                             #np.log(self.sim.B(t))])#,                                   # B_t
+                             #self.sim.MarkToMarketPrice(1, self.t_0, t, self.T)])       # V(t)
+        return contract
+
+    def is_active(self, t):
+        t = int(t)
+        if t >= self.t_0 and t <= self.T:
+            return True
+        else:
+            return False
