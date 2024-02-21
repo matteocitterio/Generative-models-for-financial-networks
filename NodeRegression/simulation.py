@@ -212,83 +212,6 @@ class Simulation:
                 
         return np.asarray(arrival_times)
 
-    def GetFixedLeg(self, t_0, t, T, notional = 1.):
-        """
-        Returns the fixed leg process involved in the OIS
-
-        Parameters
-        ----------
-        - t_0 : `int`
-           Arrival time of the contract
-        - t : `int`
-           Time at which we want to evaluate the process
-        - T : `int`
-           Maturity time of the contracr
-        - notional : `float` (default = 1.) 
-           Notional of the OIS
-
-        Returns
-        --------
-        - `float`
-           Value of the fixed leg process at time t
-        """
-        
-        return notional * (self.Price(t, T) / self.Price(t_0, T))
-
-    def GetFloatingLeg(self, t_0, t, notional = 1):
-        """
-        Evaluates the Floating leg process of the OIS
-        
-        Parameters
-        ----------
-        - t_0 : `int`
-           Arrival time of the contract
-        - t : `int`
-           Time at which we want to evaluate the process
-        - T : `int`
-           Maturity time of the contracr
-        - notional : `float` (default = 1.) 
-           Notional of the OIS
-
-        Returns
-        --------
-        - `float`
-           Value of the floating leg process at time t
-        """
-        #Qui è corretto prendere t_0+1 perchè vogliamo fare il prodotto 0<= t <= t_0 poi facendone il rapporto
-        #t_0 si semplifica
-
-        return notional * np.prod(1+(self.CIRProcess[t_0+1:t+1]*1/365))
-
-    def MarkToMarketPrice(self, delta, t_0, t, T, notional = 1):
-        """
-        Computes the value at time t of an OIS that was traded at time t_0 with maturity T
-
-        Parameters
-        ----------
-        - delta : `int`
-           could only assume values -1, +1. And it defines the role of the agent, where it is paying the fixed leg or the 
-           floating one
-        - t_0 : `int`
-           Arrival time of the contract
-        - t : `int`
-           Time at which we want to evaluate the process
-        - T : `int`
-           Maturity time of the contracr
-        - notional : `float` (default = 1.)
-           Notional of the OIS
-
-        Returns
-        --------
-        - `float`
-           Value of OIS contract for agent described by `delta` at time `t`
-        """
-        #As we are considering only active nodes i think there is no need for that
-        if t > T or t<0 or t<t_0:
-            return 0
-
-        return delta * notional * (self.GetFixedLeg(t_0, t, T) - self.GetFloatingLeg(t_0, t))
-
     def SimulateAllEdges(self):
         """
         It simulates the contract arrival process on every edge of the financial network
@@ -716,26 +639,154 @@ def scale_targets(dataset):
 class Contract:
 
     def __init__(self, t_0, sim):
+        """
+        Instantiate a contract object
+
+        Parameters
+        ----------
+        - t_0 : `int`
+            starting time of the contract
+        - sim : `Simulation object`
+            simulation of the financial network
+
+        Data members
+        ----------
+        - t_0 : `int`
+            starting time of the contract
+        - T : `int`
+            Maturity of the contract, computed as the starting time + 365
+        - delta : `int`
+            +1 / -1 identifying the leg of the swap contract
+        - notional : `int` [default = 1]
+            principal notional for the swap contract
+        - sim : `Simulation`
+            Simulation object for the financial network
+        """
         # contract start time
         self.t_0 = int(t_0)
         # contract end time
         self.T = self.t_0 + 365
         self.delta = 1.
+        self.notional = 1.
         self.sim = sim
 
     def get_contract_features(self, t):
+        """
+        Retrieves the contracts features at time t
+        
+        Parameters
+        ----------
+        - t : `int`
+            time at which the contracts features are getting retrieved
+      
+        Returns
+        ----------
+        - contract : `torch.tensor`
+            Tensor containing the contract features {(T-t)/365, log(p(t_0,T)), log(p(t,T)), B(t_0), B(t)}
+
+        """
         t = int(t)
         contract = torch.tensor([(self.T - t)/365.,                                       # (T-t)/365
-                                 np.log(self.sim.Price(self.t_0, self.T))])                # p(t_0, T)
-                           #   #COMMENTED: FOCUS ON FIXED LEG
-                             #np.log(self.sim.B(self.t_0)),                               # B_t_0
-                             #np.log(self.sim.B(t))])#,                                   # B_t
-                             #self.sim.MarkToMarketPrice(1, self.t_0, t, self.T)])       # V(t)
+                                 np.log(self.sim.Price(self.t_0, self.T)),                # p(t_0, T)
+                                 #np.log(self.sim.Price(t, self.T))])#,
+                           
+                                 np.log(self.sim.B(self.t_0)),                            # B_t_0
+                                 np.log(self.sim.B(t))])#,                                # B_t
+                                
         return contract
 
     def is_active(self, t):
+        """
+        Checks whether a contract is active @time time.
+        --- TO CHECK LEFT CONTINUITY ---
+
+        Parameters
+        ----------
+
+        - t : `int`
+            time at which the contract is checked
+      
+        Returns
+        ----------
+        - is_active: `bool`
+        """
         t = int(t)
         if t >= self.t_0 and t <= self.T:
             return True
         else:
             return False
+        
+    def GetFixedLeg(self, t):
+        """
+        Returns the fixed leg value of the OIS
+
+        Parameters
+        ----------
+        - t : `int`
+           Time at which we want to evaluate the leg
+
+        Returns
+        --------
+        - `float`
+           Value of the fixed leg process at time t
+        """
+        
+        return self.notional * (self.sim.Price(t, self.T) / self.sim.Price(self.t_0, self.T))
+    
+    def GetFloatingLeg(self, t):
+        """
+        Evaluates the Floating leg of the OIS
+        
+        Parameters
+        ----------
+        - t : `int`
+           Time at which we want to evaluate the process
+
+        Returns
+        --------
+        - `float`
+           Value of the floating leg process at time t
+        """
+
+        return self.notional * np.prod(1+(self.sim.CIRProcess[self.t_0+1:t+1]*1/365))
+    
+    def MarkToMarketPrice(self, t):
+        """
+        Computes the contract's mark-to-market value
+
+        Parameters
+        ----------
+        - t : `int`
+           Time at which we want to evaluate the contract
+
+        Returns
+        --------
+        - `float`
+           Value of the OIS contract for at time `t`
+        """
+        #As we are considering only active nodes i think there is no need for that
+        if t > self.T or t<0 or t<self.t_0:
+            return 0
+
+        return self.delta * self.notional * (self.GetFixedLeg(t) - self.GetFloatingLeg(t))
+    
+    def GetVariationMargin(self,t):
+        """
+        Returns the Margin (M_k^ij(t)) of a specific contract
+
+        Parameters
+        -----------
+        - t : `int`
+           Time at which we evaluate the contract
+
+        Returns
+        -------
+        - float
+           M_k^{ij}(t) of contract k
+        """
+
+        V_t = self.MarkToMarketPrice(t)
+        V_t_1 = self.MarkToMarketPrice(t - 1)
+
+        return (V_t - (1 + (self.sim.CIRProcess[t] * 1 / 365) ) * V_t_1)
+   
