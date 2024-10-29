@@ -1,0 +1,23 @@
+!!python/object:argparse.Namespace
+alpha: 0.6
+b: 0.04
+batch_size: 1000
+contract_frequency: 150
+gamma: 0.4
+initial_lr: 0.005
+lstm_hidden_size: 15
+n_epochs: 20000
+number_regressor_layers: 1
+output_training_file_name: ./results/metrics_test_43.txt
+output_validation_file_name: ./results/metrics_test_43_valid.txt
+patience: 30
+regressor_hidden_size: 128
+regressor_hidden_size_2: 512
+scheduler_gamma: 0.9
+scheduler_milestone_frequency: 130
+scheduler_number_of_updates: 60
+sigma: 0.14
+test_number: 43
+v_0: 0.04
+validation_every: 50
+years: 60
