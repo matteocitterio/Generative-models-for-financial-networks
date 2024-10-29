@@ -23,13 +23,17 @@ class Simulation:
         - b : `float`
         - sigma : `float`
         - v_0 : `float`
-        - years: `int`
+        - years : `int`
            Number of years to be taken as the simulation time horizon. The simulation will be based on a time grid of a
            number of points 365 * year
         - seed :`bool`
            If True it will set the seed of the simulation to 0
-        - num_nodes: `int`
+        - num_nodes : `int`
            Number of nodes in the simulated graph
+        - gamma : `float`
+           Multiplier factor that tunes the stocastic intensity of the COX Process (See Eq. 5.17)  
+        - seed_number : `int`
+           Seed number for the simulation
         
         """
         
@@ -37,16 +41,21 @@ class Simulation:
         self.b = b
         self.sigma = sigma
         self.v_0 = v_0
+
         #Number of the points of time time grid
         self.TotPoints = int(years * 365)
 
-        #Default Cox-process coefficients:
+        #Default Cox-process coefficients (See Eq. 5.17):
         self.eta = - 4
         self.theta = 80
         self.gamma = gamma
+
+        # These grid is used to bin the outcome of the simulation as later shown in `Price`. The grid extreme values are empirically identified. 
         self.r_grid = np.linspace(0.0002, 0.157, 600)
+
         #This matrix contains all the p(t,T) computed for the case seed=0, speeds up simulation a lot
-        self.PriceMatrix = np.load('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy')
+        self.PriceMatrix = np.load('/Definitive/data/PriceMatrix_Duffie_Updated.npy')
+        #Time grid used for the simulation
         self.time_grid = np.linspace(0., years, 365*years)
 
         #This is the reference interest rate we take for the entire simulation and all edges
@@ -79,6 +88,8 @@ class Simulation:
            Current time at which we want to know the bond price
         - T : `int`
            Maturity of the bond contract
+        - r : `float` [optional]
+           Used to pass a costum interest rate 
            
         Returns
         -------
@@ -90,6 +101,7 @@ class Simulation:
         if r == None:
             r = self.CIRProcess[t]
         
+        #This bins the r process into a predefined grid (=>computational efficiency)
         closest_index = np.argmin(np.abs(self.r_grid-r))
         return self.PriceMatrix[closest_index, tau]
 
@@ -117,11 +129,10 @@ class Simulation:
                return 1
 
          # Monte Carlo simulations
-         #NB in numpy.prod l'estremo di desta non è incluso nella produttoria quindi se voglia t<=T dobbiamo prendere
-         #fino a T+1
-         #NB l'estremo di sinistra è invece incluso. Nel calcolo di B_t lo vogliamo prendere incluso dal momento che 
-         #poi con il rapporto il t_0 si cancella ma nel calcolo diretto di p(t_0, T) non lo vogliamo quindi prendiamo
-         #anche qui t+1 s.t. we get t_0 < t <=T
+         #PLEASE NOTE that in numpy.prod the right extreme is not included in the productory, therefore if we want times t<=T we need to take
+         #up to T+1
+         #PLEASE NOTE that, conversely, the left extreme is included. When computing B_t we want to include it as it cancels out in the ratio 
+         # with t_0. However, in  the actual p(t_0, T) computation we dont want to include it, therefore we take t+1 such that we get t_0 < t <= T.
          MC_sims = get_CIR(self.time_grid[t:T+1],
                                  self.alpha,
                                  self.b,
@@ -173,8 +184,10 @@ class Simulation:
            array containing the contracts arrival times
         """
 
-        #The intensity process is computed as an affine process of the simulated CIR
+        #The intensity process is computed as an affine process of the simulated CIR (See Eq. 5.17)
         self.lambda_t = self.gamma * np.exp(self.eta + self.theta * self.CIRProcess)
+
+        #For the following process please refer to Eq. 5.25 - 5.26 - 5.27 of the Master's Thesis.
 
         #The approximated integral in discrite-time:
         cumulative_lambda = np.cumsum(self.lambda_t)
@@ -242,8 +255,8 @@ class Simulation:
         - `float`
            Value of the floating leg process at time t
         """
-        #Qui è corretto prendere t_0+1 perchè vogliamo fare il prodotto 0<= t <= t_0 poi facendone il rapporto
-        #t_0 si semplifica
+        #Here, it is correct to take t_0 + 1 as we want to compute the product 0<= t <= t_0. Thereafter, by making the ratio
+        #the t_0 term cancels out
         B_t_0 = np.prod(1+(self.CIRProcess[0:t_0+1]*1/365))
         B_t = np.prod(1+(self.CIRProcess[0:t+1]*1/365))
         
@@ -310,19 +323,18 @@ class Simulation:
         #Generate maturities and deltas for every k-th transition (uniformly)
         maturities = np.zeros((len(arrival_times)), dtype=int) + int(364)
         """
-        PLEASE NOTE: right now we are fixing maturity to one year
+        PLEASE NOTE: unccoment to fix maturities to one year
         """
         #maturities = np.random.randint(1, 365, size = len(arrival_times))
         deltas = np.random.choice ([-1,1], size = len(arrival_times))
 
         #Compute ending times like t_0 + T
-        #ending_times = np.minimum(arrival_times + maturities, self.TotPoints)
         ending_times = arrival_times + maturities
 
         try:
-        #Sometimes you don't have any contract between i and j
+        #Sometimes you don't have any contract between i and j and the following fails, this handles the errors
             
-            #Anche qui per lo stesso motivo di Floatingleg prendiamo in B_t_0 fino a t+1
+            #For the reasons explained before, we take B_t_0 up to t+1
             swap_rates = self.SwapRate(arrival_times, ending_times)
             B_t_0s = np.asarray(([np.prod(1+(self.CIRProcess[0:t+1]*1/365)) for t in arrival_times]))
 
@@ -341,6 +353,7 @@ class Simulation:
             }
         
         except:
+            # If we dont have contracts between [i,j]; we simply continue our simulation process.
             pass
     
     def GetInstantContractValue(self, t, contract):
@@ -382,23 +395,11 @@ class Simulation:
         -------
         - float
            M_k^{ij}(t) of contract k
-           bababa
+
         """
 
         V_t = self.GetInstantContractValue(t, contract)
         V_t_1 = self.GetInstantContractValue(t - 1 , contract)
-      #   if t==1954 or t==1955:
-      #            print('\n INSIDE MT for contract')
-      #            print('t: ',t)
-      #            print('------------------------------------')
-      #            print('contract: ', contract)
-      #            print(f't={t}, V(t)={V_t}')
-      #            print(f't={t}, V(t-1)={V_t_1}')
-      #            print(f't={t}, M(t)={(V_t - (1 + (self.CIRProcess[t] * 1 / 365) ) * V_t_1)}')
-      #            print('-------------------------------------')
-
-      #   if t == 1955:
-      #       raise NotImplementedError
 
         return (V_t - (1 + (self.CIRProcess[t] * 1 / 365) ) * V_t_1)
 
@@ -421,12 +422,11 @@ class Simulation:
            M^{ij}(t) of edge (i,j)
         """
 
-
         MarginValue = 0
         call = 0
 
-        #Ciclo su tutti i contratti anche quelli non attivi che mi daranno Mt = 0 ... un po' inefficiente
-        #Sopratutto fa edge per edge
+        #This cycles over all the contracts, including those that are non-active and yield Mt = 0. This is not super efficient, also
+        # considering that it runs over all the possible edges (O(N^2)). 
         for cont in self.E[i,j]['contracts']:
 
             call+=1
@@ -453,7 +453,7 @@ class Simulation:
         """
         M_t = 0
 
-        #Questo cicla solo su i contratti attivi, molto più efficiente
+        #This considers only the active contracts, way more efficient
         for j in range(active_contracts_for_node_i.shape[0]):
             
             M_t += self.GetInstantContractMarginValue(t, active_contracts_for_node_i[j,2:])
@@ -526,11 +526,6 @@ def GetActiveContractsIndices(sim, contracts):
         alive_contract_indices = np.intersect1d(formed_contract_indices.cpu(), not_yet_expired_contract_indices.cpu())
 
         alive_indices_list.append(alive_contract_indices)
-      #   if t ==1954 or t==1955:
-      #       print('t: ',t)
-      #       print('Formed contract indices: ', formed_contract_indices)
-      #       print('not_yet expired: ', not_yet_expired_contract_indices)
-      #       print('Alive_contract: ', alive_contract_indices)
     
     return alive_indices_list
 
