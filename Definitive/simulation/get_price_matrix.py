@@ -11,12 +11,6 @@ years = 10
 
 grid = np.linspace(0., years, 365*years)
 
-
-# PriceMatrix = np.zeros((sim.TotPoints - 365, 365))
-# print(PriceMatrix.shape)
-# loop = tqdm(range(sim.TotPoints - 365), desc='t')
-
-
 r_grid = np.linspace(0.0001, 0.16,1200)
 PriceMatrix = np.zeros((1200, 366))
 n_samples = 1000
@@ -47,4 +41,4 @@ for i in loop:
             prod = np.prod(1+MC_sims[1:]*(1./365), axis=1)
             PriceMatrix[i,tau] = np.mean(prod**(-1))
 
-np.save('/u/mcitterio/data/PriceMatrix_Duffie_Updated.npy', PriceMatrix)
+np.save('Definitive/data/PriceMatrix_Duffie_Updated.npy', PriceMatrix)

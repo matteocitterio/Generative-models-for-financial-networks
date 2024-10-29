@@ -13,5 +13,11 @@ This folder contains the code used to generate the network's synthetic data, as 
     - `--nodes` number of nodes in the network to include in the simulation
     - `--gamma` float, it tunes the stochastic intensity of the COX process that governs the birth of new contracts within the network.
 
+- `edge_features.npy` stores the simulation of the network in terms of the contract process (no pricing yet). The '.npy' format allows to straightforwardly load the matrix into a numpy format.
+
+- `get_price_matrix.py` computes the matrix containing all the p(t,T), computed for the case seed=0. Speeds up simulation a lot.
+
+
+
 
 
