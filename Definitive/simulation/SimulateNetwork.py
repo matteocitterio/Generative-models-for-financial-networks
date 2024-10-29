@@ -21,12 +21,19 @@ parser.add_argument('--device', type=str, help='Device')
 parser.add_argument('--nodes', type=int, help='Number of nodes in the network')
 parser.add_argument('--gamma', type=float, help='Gamma for the arrival times process')
 
+"""
+Example usage:
+
+    `python SimulateNetwork.py --do_simulation --device cuda --nodes 10 --gamma 1`
+
+"""
+
 args = parser.parse_args()
 device = args.device
 
 scaler = MinMaxScaler()
 
-# Define some default parameters for the Simulation
+# Define some default parameters for the Simulation (See Sec.5.2 for the parameters details)
 alpha = 0.6
 b = 0.04
 sigma = 0.14
@@ -43,10 +50,11 @@ if args.do_simulation:
 
     #Run the actual simulation
     sim.SimulateAllEdges()
-    np.save('/u/mcitterio/data/edge_features.npy', sim.E)
+    np.save('Definitive/data/edge_features.npy', sim.E)
 
 else:
-    sim.E = np.load('/u/mcitterio/data/edge_features.npy', allow_pickle=True)
+    #Load the matrix
+    sim.E = np.load('Definitive/data/edge_features.npy', allow_pickle=True)
 
 # Get the simulation contracts as tensors
 contracts = GetSimulationQuantitiesTensors(sim, device)
@@ -98,20 +106,11 @@ for t in loop:
         #take active contracts just for node i
         indices_for_node_i = (source_nodes == i).nonzero(as_tuple=True)
         contracts_for_node_i = active_contract_at_time_t[indices_for_node_i]
-
-        #Take as target M^i(t)
-        #y[i] = sim.GetMtForNodeAtActiveContracts(contracts_for_node_i,t)
     
         #Cycle over active contracts for node i
         for j in range(contracts_for_node_i.shape[0]):
 
             #Fill feature matrix accordingly
-            #Subtract in order to obtain time to maturity
-            #print('Maturity: ',contracts_for_node_i[j][3])
-            #print('arrival time: ',contracts_for_node_i[j][2])
-            #print('Maturity -t ', contracts_for_node_i[j][3] - t)
-            #print('t: ', t)
-            # raise NotImplementedError
             y[i] += sim.GetInstantContractMarginValue(t, contracts_for_node_i[j,2:])
             contracts_for_node_i[j][3] = contracts_for_node_i[j][3] - t
             X[i][0 + (j*5) : 5 + (j*5)] = contracts_for_node_i[j][2:7]
@@ -119,7 +118,4 @@ for t in loop:
     subgraph = Data(edge_index=edge_index, x = X, y = y, num_nodes = num_nodes)
     dataset.append(subgraph)
 
-torch.save(dataset, f'/u/mcitterio/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
-
-# Load the list of Data objects
-#loaded_subgraphs = torch.load('subgraphs.pt')
+torch.save(dataset, f'Definitive/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
