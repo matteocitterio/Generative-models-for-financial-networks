@@ -17,6 +17,8 @@ This folder contains the code used to generate the network's synthetic data, as 
 
 - `get_price_matrix.py` computes the matrix containing all the p(t,T), computed for the case seed=0. Speeds up simulation a lot.
 
+- `get_conditioning_structure.py` TO DELETE(?) I DONT REMEMBER WHAT IT DOES TBH.
+
 
 
 
