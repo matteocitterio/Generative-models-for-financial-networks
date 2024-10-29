@@ -1,30 +1,23 @@
-from simulation import Simulation, GetActiveContractsIndices, GetSimulationQuantitiesTensors, return_max_num_contracts
+from simulation import Simulation
 import argparse
 import numpy as np
 import torch
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
 
-import torch_geometric.transforms as T
-from torch_geometric.utils import degree
-from torch_geometric.transforms import one_hot_degree, Compose, ToDevice
-from torch_geometric.loader import DataLoader 
 from torch_geometric.data import Data
-from torch_geometric.data.temporal import TemporalData
-from torch.utils.data import Dataset
-import torch.nn.functional as F
 
-#Get command line input
+#Get command line input as described in the Readme.md
 parser = argparse.ArgumentParser(description='Parser')
 parser.add_argument('--do_simulation', action='store_true', help='Whether to do the simulation or to load a pre-existing sim.E matrix')
 parser.add_argument('--device', type=str, help='Device')
 parser.add_argument('--nodes', type=int, help='Number of nodes in the network')
-parser.add_argument('--gamma', type=float, help='Gamma for the arrival times process')
+parser.add_argument('--steps', type=int, help='Steps ahead')
 
 """
 Example usage:
 
-    `python SimulateNetwork.py --do_simulation --device cuda --nodes 10 --gamma 1`
+    `python SimulateNetwork.py --do_simulation --device cuda --nodes 10 --steps 1`
 
 """
 
@@ -33,89 +26,126 @@ device = args.device
 
 scaler = MinMaxScaler()
 
-# Define some default parameters for the Simulation (See Sec.5.2 for the parameters details)
+# Define some default parameters for the Simulation
 alpha = 0.6
 b = 0.04
 sigma = 0.14
 v_0 = 0.04
-years = 19
+gamma = 3
+years = 60
 num_nodes = args.nodes
 
-print(f'Doing simulation of {args.nodes} nodes and \gamma = {args.gamma}')
+print(f'Doing simulation of {args.nodes} nodes, {years} years, {args.steps} steps ahead')
 
 #Instantiate simulation (using seed = True)
-sim = Simulation(alpha, b, sigma, v_0, years, seed = True, num_nodes = num_nodes, gamma = args.gamma)
+sim = Simulation(alpha, b, sigma, v_0, years, seed = True, num_nodes = num_nodes, gamma = gamma)
+CIRProcess = torch.tensor(sim.CIRProcess.reshape(-1,1)).to(torch.float32).to(device)
 
 if args.do_simulation:
 
     #Run the actual simulation
-    sim.SimulateAllEdges()
+    sim.SimulateAllEdges(steps_ahead = args.steps)
     np.save('Definitive/data/edge_features.npy', sim.E)
 
 else:
+    
     #Load the matrix
     sim.E = np.load('Definitive/data/edge_features.npy', allow_pickle=True)
 
-# Get the simulation contracts as tensors
-contracts = GetSimulationQuantitiesTensors(sim, device)
 
-# Now we need to get the list of indexis of active contracts at time t:
-active_contracts_indices = GetActiveContractsIndices(sim, contracts)
+# Get the simulation active contracts
+active_contracts, active_days = sim.GetActiveContractList()
+print('len of active: ', len(active_contracts), len(active_days))
 
-# Get the maximum number of simultaneously active contracts observed for an edge throughout the entire horizon [0,T]
-max_num_contracts = return_max_num_contracts(contracts, active_contracts_indices)
-print('Max num contracts: ', max_num_contracts)
+#Get the maximum number of simultaneously active contracts (it gives the shape of the tensor)
+max_n_active_contracts = sim.GetMaximumNActiveContracts(active_contracts)
+print(f"Max number of simultaneously active contracts: {max_n_active_contracts}")
 
-#Define a tqdm loop for UI friendlyness
-loop = tqdm(range(len(active_contracts_indices)), desc='Time')
+#Get contract size
+contract_size = len(active_contracts[0][0].get_contract_features(active_days[0]) )   
+
+#Define a tqdm loop for UI friendliness
+loop = tqdm(range(len(active_contracts)), desc='Time')
 dataset = []
+
+h=0
+
+y_benchmark = torch.zeros(((len(active_contracts), args.nodes, args.steps)))
 
 for t in loop:
 
     #Node feature matrix
-    X = torch.zeros((num_nodes, 5 * max_num_contracts)).to(device)
+    X = torch.zeros((num_nodes, contract_size * max_n_active_contracts)).to(device)
     #Node target array
     y = torch.zeros((num_nodes)).to(device)
 
     #Set the current advancement
     loop.set_postfix(t=t)
 
-    #Index are the indices for active contracts at time t
-    index = active_contracts_indices[t]
-    #Actually active contracts at this time
-    active_contract_at_time_t = contracts[index]
-    
-    #This are the edge indexis for all the contracts
-    edge_index = torch.stack([active_contract_at_time_t[:,0], active_contract_at_time_t[:,1]], dim=0).to(device)
+
+    #Retrieve (src,dst) for active contracts at time t and build a tensor of shape (2, |\mathcal(E)|)
+    edges = torch.stack([torch.tensor([contract.src, contract.dst]) for contract in active_contracts[t]], dim=1)
+
     #This selects only the edges that actually have a contract, unregarding of the number of contracts they have
-    edge_index, unique_indices, counts = torch.unique(edge_index.cpu(), dim=1, return_inverse=True, return_counts=True)
+    edge_index, unique_indices, counts = torch.unique(edges.cpu(), dim=1, return_inverse=True, return_counts=True)
+    
     #Convert edge_index to int type
     edge_index = edge_index.to(torch.int64)
-    
-    #This selects the source nodes for active contracts at time time
-    source_nodes = active_contract_at_time_t[:,0].to(int)
-    unique_source_nodes, _ = torch.unique(source_nodes.cpu(), return_inverse=True) 
 
-    time_array = contracts[:,2]
+    #This selects the source nodes for active contracts at time time
+    source_nodes = torch.unique(edge_index[0,:])
 
     #Cycle over X rows
-    for i in unique_source_nodes:
-
-        #Here we consider node i, X_i
+    #Here we consider node i, X_i
+    for i in source_nodes:
         
         #take active contracts just for node i
-        indices_for_node_i = (source_nodes == i).nonzero(as_tuple=True)
-        contracts_for_node_i = active_contract_at_time_t[indices_for_node_i]
-    
-        #Cycle over active contracts for node i
-        for j in range(contracts_for_node_i.shape[0]):
+        contracts_for_node_i = [contract for contract in active_contracts[t] if contract.src==i]
 
-            #Fill feature matrix accordingly
-            y[i] += sim.GetInstantContractMarginValue(t, contracts_for_node_i[j,2:])
-            contracts_for_node_i[j][3] = contracts_for_node_i[j][3] - t
-            X[i][0 + (j*5) : 5 + (j*5)] = contracts_for_node_i[j][2:7]
+        for eta in range(args.steps):
+            
+            #Compute the benchmark to compare with the model's results
+            y_benchmark[h,i, eta] = sim.ProvideBenchmark(t_l=t, steps_ahead=eta+1, contracts=contracts_for_node_i, n_simulations=100)
 
-    subgraph = Data(edge_index=edge_index, x = X, y = y, num_nodes = num_nodes)
+        for i_contract, contract in enumerate(contracts_for_node_i):
+
+            #Compute M_ij
+            try:
+                y[i] += contract.GetVariationMargin(active_days[t])
+                contract_features = contract.get_contract_features(active_days[t])                  
+
+            except:
+                #Error handling
+                print('EXCEPTION OCCURED')
+                print('t:',t)
+                print('contract: ',contract)
+                print('contract.is_active(t): ',contract.is_active(t))
+                print('active_days[t]: ', active_days[t])
+                print('contract.is_active(active_days[t]): ',contract.is_active(active_days[t]))
+                raise NotImplementedError   
+            
+            try:
+                X[i,i_contract*len(contract_features) : (i_contract+1)*len(contract_features)] = contract_features
+            except:
+                #Error handling
+                print('EXCEPTION OCCURED')
+                print('t:',t)
+                print('Contracts for node i: ', contracts_for_node_i)
+                print('contract: ',contract)
+                print('active_days[t]: ', active_days[t])
+                print('i: ', i)
+                print('X[i]: ', i)
+                print('i_contract: ', i_contract )
+                print('i_contract*len(contract_features):', i_contract*len(contract_features))
+                print('(i_contract+1)*len(contract_features): ', (i_contract+1)*len(contract_features))
+                print('contract_features: ', contract_features)
+                raise NotImplementedError   
+
+    h+=1
+
+    subgraph = Data(edge_index=edge_index, x = X, y = y, r=CIRProcess[active_days[t]],node_feat=sim.node_features, num_nodes = num_nodes)
     dataset.append(subgraph)
 
-torch.save(dataset, f'Definitive/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
+#Save the dataset
+torch.save(y_benchmark,f'Definitive/data/y_benchmark_{num_nodes}nodes.pt')
+torch.save(dataset, f'Definitive/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma_TEST.pt')
