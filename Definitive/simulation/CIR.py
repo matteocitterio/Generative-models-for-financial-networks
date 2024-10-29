@@ -31,6 +31,12 @@ def get_CIR(ts, alpha, b, sigma, initial_value, n_samples=1, seed=False, seed_nu
     
     n_samples : int
         Number of samples.
+
+    seed : bool
+        Flag that tells whether to use a predetermined input seed or not.
+
+    seed_number : int
+        The predetermined seed number
         
         
     Returns:
@@ -50,23 +56,15 @@ def get_CIR(ts, alpha, b, sigma, initial_value, n_samples=1, seed=False, seed_nu
     '''
     #set seed
     if seed:
-        #np.random.seed(0)
 
         np.random.seed(seed_number)
-        #torch.manual_seed(seed_value)
-        # if torch.cuda.is_available():
-        #     torch.cuda.manual_seed(seed_value)
-        #     torch.cuda.manual_seed_all(seed_value)
-    #the rest
+
+    #CIR simulation
     proc = np.zeros((n_samples, len(ts)))
-    #proc = torch.zeros((n_samples, len(ts))).to('cuda')
     proc[:, 0] = initial_value*np.ones(n_samples)
-    #proc[:, 0] = initial_value*torch.ones(n_samples).to('cuda')
 
     dt = ts[1] - ts[0]   #as they are evenly spaced
-    #dt = torch.tensor(ts[1] - ts[0]).to('cuda')
     c = (sigma**2)*((1-np.exp(-alpha*dt))/(4*alpha))
-    #c = (sigma**2)*((1-torch.exp(-alpha*dt).to('cuda'))/(4*alpha))
     d = (4*b*alpha)/(sigma**2)
 
     # print(f'd: {d}')
@@ -74,11 +72,8 @@ def get_CIR(ts, alpha, b, sigma, initial_value, n_samples=1, seed=False, seed_nu
 
     for i in range(1, len(ts)):
         
-        nc = proc[:, i-1]*((np.exp(-alpha*dt))/c)
-        #nc = proc[:, i-1]*((torch.exp(-alpha*dt).to('cuda'))/c)
-        
+        nc = proc[:, i-1]*((np.exp(-alpha*dt))/c)        
         proc[:, i] = c*(ncx2.rvs(df=d, nc=nc))
-        #proc[:, i] = c*torch.tensor(ncx2.rvs(df=d, nc=nc.cpu())).to('cuda')
 
     return proc
 
