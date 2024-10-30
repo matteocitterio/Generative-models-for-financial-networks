@@ -22,7 +22,6 @@ from GCLSTM import GCLSTM
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Fix current device
-
 device = (
     "cuda:0"
     if torch.cuda.is_available()
@@ -31,18 +30,16 @@ device = (
     else "cpu"
 )
 
-device = 'cuda:0'
-
 print('Current device:', device)
 
-
+#This lines read and manage model parameters by reading the `params.yaml` file. For more info, check `Sandbox_utils.py` 
 parser = utils.create_parser()
 args = utils.parse_args(parser)
 
 print('\n',args, '\n')
 
-
-path_name = '/u/mcitterio/temp/Generative-models-for-financial-networks/NodeRegression/'
+# Retrieve dataset from the simulation
+path_name = '../Definitive/data/'
 data_file_name = path_name + f'subgraphs_Duffie_{args.num_nodes}nodes_3gamma.pt'
 
 try:
@@ -53,7 +50,7 @@ except:
     print('Error: the data file doesnt exist, please run `SimulateNetwork.py`')
     raise ValueError
 
-# Generate CIR process & simulation
+# Generate CIR process & simulation (The same used for simulating the network)
 sim = Simulation(args.alpha, args.b, args.sigma, args.v_0, args.years, gamma = args.gamma, seed=True)
 CIRProcess = torch.tensor(sim.CIRProcess.reshape(-1,1)).to(torch.float32).to(device)
 
