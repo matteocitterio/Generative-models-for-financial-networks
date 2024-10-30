@@ -32,7 +32,7 @@ def create_parser_custom_file():
     """
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--number', type=int, help='Provide the test number')
-    server_file_string = '/u/mcitterio/temp/Generative-models-for-financial-networks/NodeRegression/'
+    server_file_string = '../Definitive/NodeRegression/'
     parser.add_argument('--server_string', default=server_file_string, type=str, help='Provide the server file location')
     parameters_file = server_file_string + 'parameters/test_'+str(parser.parse_args().number)+'.yaml'
     parser.add_argument('--config_file',default=parameters_file, type=argparse.FileType(mode='r'), help='optional, yaml file containing parameters to be used, overrides command line parameters')
