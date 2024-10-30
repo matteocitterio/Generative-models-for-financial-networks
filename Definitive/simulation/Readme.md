@@ -15,7 +15,7 @@ This folder contains the code used to generate the network's synthetic data, as 
 
 - `edge_features.npy` stores the simulation of the network in terms of the contract process (no pricing yet). The '.npy' format allows to straightforwardly load the matrix into a numpy format.
 
-- `get_price_matrix.py` computes the matrix containing all the p(t,T), computed for the case seed=0. Speeds up simulation a lot.
+- `get_price_matrix.py` Computes a matrix with entrances $p(t,T)$ using a MonteCarlo simulation so that it doesn't compute an MC expectation every time the price function is called.
 
 - `get_conditioning_structure.py` TO DELETE(?) I DONT REMEMBER WHAT IT DOES TBH.
 

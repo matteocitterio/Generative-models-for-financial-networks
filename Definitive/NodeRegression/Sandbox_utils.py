@@ -20,7 +20,7 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 def create_parser():
     """
-    Selects the parameter file from a command line input
+    Selects the parameter file from a command line input. The DEAFULT NAME is `params.yaml`
     """
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--config_file',default='params.yaml', type=argparse.FileType(mode='r'), help='optional, yaml file containing parameters to be used, overrides command line parameters')
