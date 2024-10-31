@@ -30,7 +30,7 @@ print('Current device:', device)
 parser = utils.create_parser()
 args = utils.parse_args(parser)
 
-path_name = '/u/mcitterio/temp/Generative-models-for-financial-networks/NodeRegression/'
+path_name = './Definitive/NodeRegression/'
 data_file_name = path_name + f'X_tensor_{args.steps_filename}_steps.pt'
 
 if os.path.exists(data_file_name):

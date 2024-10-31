@@ -26,21 +26,9 @@ def create_parser():
     parser.add_argument('--config_file',default='params.yaml', type=argparse.FileType(mode='r'), help='optional, yaml file containing parameters to be used, overrides command line parameters')
     return parser
 
-def create_parser_custom_file():
-    """
-    Selects the parameter file from a command line input
-    """
-    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--number', type=int, help='Provide the test number')
-    server_file_string = '../Definitive/NodeRegression/'
-    parser.add_argument('--server_string', default=server_file_string, type=str, help='Provide the server file location')
-    parameters_file = server_file_string + 'parameters/test_'+str(parser.parse_args().number)+'.yaml'
-    parser.add_argument('--config_file',default=parameters_file, type=argparse.FileType(mode='r'), help='optional, yaml file containing parameters to be used, overrides command line parameters')
-    return parser
-
 def parse_args(parser, save=True):
     """
-    Takes a parser in input which tells it which file we'll be working on and returns a args.
+    Takes a parser in input which tells which file we'll be working on and returns an "args" object.
     RETURN
     args
     """
@@ -93,6 +81,7 @@ def parse_args(parser, save=True):
 
     return args
 
+#MAYBE TO DELETE
 def CreateContracts(arrival_times, sim):
     """
     Build the contracts using Simulation and arrival times.
@@ -115,6 +104,7 @@ def CreateContracts(arrival_times, sim):
 
     return contracts
 
+#MAYBE TO DELETE, THERE IS ALREADY A CLASS SIM METHOD FOR THIS
 def GetMaximumNActiveContracts(contracts, sim):
     """
     Compute maximum number of simultaneously active contracts
