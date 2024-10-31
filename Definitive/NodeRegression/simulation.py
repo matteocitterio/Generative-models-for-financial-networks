@@ -51,7 +51,7 @@ class Simulation:
         self.r_grid = np.linspace(0.0002, 0.157, 600)
 
         #This matrix contains all the p(t,T) computed for the case seed=0, speeds up simulation a lot
-        self.PriceMatrix = np.load('Definitive/data/PriceMatrix_Duffie_Updated.npy')
+        self.PriceMatrix = np.load('../data/PriceMatrix_Duffie_Updated.npy')
         #Time grid used for the simulation
         self.time_grid = np.linspace(0., years, 365*years)
 
