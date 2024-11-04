@@ -200,7 +200,7 @@ class LSTMModel(torch.nn.Module):
         super(LSTMModel, self).__init__()
 
         self.lstm = torch.nn.LSTM(input_size = args.contract_size, 
-                                   hidden_size = args.lstm_hidden_size,#args.lstm_hidden_size, 
+                                   hidden_size = args.lstm_hidden_size,
                                    num_layers = 1)
         self.regressor = Regressor(args)
         self.relu=torch.nn.ReLU()
@@ -208,7 +208,6 @@ class LSTMModel(torch.nn.Module):
 
         self.args = args
 
-        
         self.lstm.reset_parameters()
         self.lstm.flatten_parameters()
     
@@ -225,13 +224,9 @@ class LSTMModel(torch.nn.Module):
 
         #Cycle over the number of nodes
         for n in range(self.args.num_nodes):
-            
-            # print('n: ',n)
 
             #Cycle over the maximum number of contracts
             for i in range(x.shape[3]//self.args.contract_size):
-
-                # print('i: ',i)
             
                 #select the contract sequence for the node
                 contract = x[:,:,n, i*self.args.contract_size : (i+1)*self.args.contract_size] 
@@ -240,18 +235,8 @@ class LSTMModel(torch.nn.Module):
 
                     for j in range(self.args.steps_ahead):
 
-                        # print('j: ',j)
-
-                        # print('LSTM: ',self.lstm)
-                        # print('contract.shape: ',contract.shape)
                         lstm_hidden, _ = self.lstm(contract)
-                        # print('lstm_hidden.shape: ',lstm_hidden[:,-1,:].shape)
-                        # print('hidden_intensity.shape:',hidden_intensity[:,n,:].shape)
-                        # print('r.shape: ', r[:,j].shape)
                         prediction = self.regressor(torch.squeeze(torch.cat([lstm_hidden[:,-1,:], hidden_intensity[:,n,:], r[:,j].reshape(-1,1)],dim=1)))
-                        # print('prediction.shape: ',prediction.shape)
-                        # print('single pred.shape: ', self.fc(self.relu(prediction)).squeeze().shape)
-                        # print('total prediction array.shape: ',pred.shape)
                         pred[:,n, j] += self.fc(self.relu(prediction)).squeeze()
                         #prediction = prediction.unsqueeze(0).unsqueeze(0) #CHANGE TRAINING / PREDICTION
                         prediction = prediction.unsqueeze(1)
@@ -318,7 +303,6 @@ class Regressor(torch.nn.Module):
     
     def forward(self,x):
         return self.regressor(x)
-    
 
     def reset_parameters(self):
 
@@ -333,10 +317,9 @@ class CompleteModel(torch.nn.Module):
             
         super(CompleteModel, self).__init__()
 
-        #self.gclstm = GC_LSTM_model(args)
         self.gclstm = GC_LSTM_model(args)
         self.lstm = LSTMModel(args)
-        self.name=str(args.num_nodes)+str(args.lookback)+str(args.batch_size)+str(args.steps_ahead)#    'ammammate'#str(args.regressor_hidden_size) + str(args.lookback)
+        self.name=str(args.num_nodes)+str(args.lookback)+str(args.batch_size)+str(args.steps_ahead)#    'ammammate'
 
         #self.regressor = Regresso(args) already inside lstm
         #self.reset_params() already inside the two objects.
@@ -347,39 +330,4 @@ class CompleteModel(torch.nn.Module):
         hidden_intensity = self.gclstm(InputList)
         pred = self.lstm(x, hidden_intensity, r)
 
-        return pred
-
-   
-
-# Early stopping class
-class EarlyStopping:
-    def __init__(self,args):
-        self.patience = args.patience
-        self.delta = args.delta
-        self.counter = 0
-        self.path = args.output_training_file_name+'checkpoint.pt'
-        self.best_score = None
-        self.early_stop = False
-
-    def __call__(self, val_loss, model):
-        score = -val_loss
-
-        if self.best_score is None:
-            self.best_score = score
-            self.save_checkpoint(val_loss, model)
-        elif score < self.best_score + self.delta:
-            self.counter += 1
-            print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
-            if self.counter >= self.patience:
-                self.early_stop = True
-        else:
-            self.best_score = score
-            self.save_checkpoint(val_loss, model)
-            self.counter = 0
-
-    def save_checkpoint(self, val_loss, model):
-        torch.save(model.state_dict(), self.path)
-        print(f'Model saved! Validation loss: {val_loss}')
-
-
-
+        return pred   

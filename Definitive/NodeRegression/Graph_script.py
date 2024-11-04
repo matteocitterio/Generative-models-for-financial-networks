@@ -35,7 +35,7 @@ print('Current device:', device)
 parser = utils.create_parser()
 args = utils.parse_args(parser)
 
-path_name = '/u/mcitterio/temp/Generative-models-for-financial-networks/NodeRegression/'
+path_name = '/Definitive/NodeRegression/'
 data_file_name = path_name + f'subgraphs_Duffie_{args.num_nodes}nodes_3gamma.pt'
 
 try:

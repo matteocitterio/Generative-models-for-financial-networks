@@ -202,8 +202,6 @@ def create_graph_windows(args, device, y_bench, dataset):
         windowed X_data
     - y_margin_data : `torch.Tensor`
         windowed y_margin_data
-    - edge_index_data: `list`
-        windowed edge_indexis tensors
     - r_data : `torch.Tensor`
         windowed r_data
     - y_benchmark_data : `torch.Tensor`
@@ -233,9 +231,6 @@ def create_graph_windows(args, device, y_bench, dataset):
 
         X_data[i_sample, :] = torch.stack([dataset[j].x for j in range(i_sample, i_sample + args.lookback)])   # it takes data in [i_sample, i_sample+lookback)
         y_margin_data[i_sample] = torch.hstack([dataset[j].y.reshape(-1,1) for j in range(i_sample + args.lookback, i_sample + args.lookback + args.steps_ahead)])
-        # print(y_bench[i_sample: i_sample + args.lookback].shape)
-        # print(y_benchmark_data[i_sample].shape)
-        # print(y_margin_data[i_sample].shape)
         y_benchmark_data[i_sample] = y_bench[i_sample+ args.lookback : i_sample + args.lookback +args.steps_ahead,:,-1]
         r_data[i_sample] = torch.hstack([dataset[j].r -dataset[j-1].r for j in range(i_sample + args.lookback, i_sample + args.lookback + args.steps_ahead ) ])  #differenziale sa Dio perchè
         
@@ -317,7 +312,7 @@ def graph_predictions(args, model, loader, gc_loader):
     #Define two tensors
     y_margin_preds = torch.zeros(len(loader), args.steps_ahead)
     y_margin_trues = torch.zeros(len(loader), args.steps_ahead)
-    #y_benchmark_trues = torch.zeros(len(dataloader), args.steps_filename)
+    y_benchmark_trues = torch.zeros(len(loader), args.steps_filename)
 
     loop = tqdm(zip(gc_loader,loader), desc='Prediction')
     
@@ -344,27 +339,13 @@ def do_epoch(args, model, loader, gc_loader, criterion, optimizer, training=True
     """
 
     temp_loss = 0
-    # torch.autograd.set_detect_anomaly(True)
-
-    hihi = 0
     
     for batch_gc, (Contract_batch, y_margin_batch, r_batch) in zip(gc_loader, loader):
         
-        #First we operate with the GC_LSTM model:
-        # print(hihi, '/',len(gc_loader))
-        # hihi+=1
-
         intensity_embedding = model.gclstm(batch_gc)
 
-        # print(intensity_embedding.reshape(Contract_batch.shape[0], Contract_batch.shape[2], intensity_embedding.shape[1]).shape)
-
         pred = model.lstm(Contract_batch, intensity_embedding.reshape(Contract_batch.shape[0], Contract_batch.shape[2], intensity_embedding.shape[1]), r_batch )
-        # print('pred.shape: ',pred.shape)
-        # print('y_margin_batch.shape: ',y_margin_batch.shape)
-
         loss = criterion(pred, y_margin_batch)
-
-        # print('loss: ',loss)
 
         #If we are actually training the model instead of performing validation
         if training:
@@ -381,50 +362,6 @@ def do_epoch(args, model, loader, gc_loader, criterion, optimizer, training=True
 
     #Take the average loss over the batches
     return temp_loss / len(loader)
-
-
-    #     raise NotImplementedError
-
-    # #Instantiate a temp variable that tracks the average loss for the batches
-    # temp_loss = 0
-    
-
-    # #Loop over data batches
-    # for X_batch, y_margin_batch, r_batch, edge_index_batch in loader:
-
-    #     #.forward() method of the model, will output both V_float and V_fixed
-    #     print('X_batch_shape: ',X_batch.shape)
-    #     print('y_batch_shape: ',y_margin_batch.shape)
-    #     print('r_batch_shape: ',r_batch.shape)
-    #     print('edge_index_batch shape: ', edge_index_batch.shape)
-
-    #     raise NotImplementedError
-
-    #     y_pred = model(X_batch, edge_index_batch, r_batch)
-    #     # print('y_pred.shape: ',y_pred.shape)
-    #     y_margin_pred = y_pred
-
-    #     #Compute the loss 
-    #     # print('y_margin_batch.shape: ',y_margin_batch.shape)
-    #     # raise NotImplementedError
-    #     loss = torch.stack([criterion(y_margin_pred[:,i], y_margin_batch[:,i]) for i in range(args.steps_ahead)]).mean()
-    #     #loss = criterion(y_margin_pred.squeeze(), y_margin_batch[:,-1].squeeze())
-
-    #     #If we are actually training the model instead of performing validation
-    #     if training:
-
-    #         #Backpropagation
-    #         loss.backward()
-
-    #         #Optimizer step
-    #         optimizer.step() 
-    #         optimizer.zero_grad()
-
-    #     #Track the batch loss
-    #     temp_loss += loss.item()
-
-    # #Take the average loss over the batches
-    # return temp_loss / len(loader)
 
 #Makes the predictions
 def predictions(args, dataset, model):

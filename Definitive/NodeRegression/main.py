@@ -74,23 +74,7 @@ Contract_test,y_margin_test, r_test = utils.create_graph_windows(args, device, t
 ########################
 n_samples = len(train_dataset) - args.lookback - args.steps_ahead + 1
 loop = tqdm(range(n_samples), desc='n_samples')
-
 print('n_samples: ',n_samples)
-print('n_samples for lookback 5: ', len(train_dataset) - 5 - args.steps_ahead + 1)
-
-datas = []
-
-for i_sample in loop:
-
-    datas.append(dataset_managment.getty(train_dataset, i_sample, args))
-
-scherzo = torch_geometric.loader.DataLoader(datas, batch_size=args.batch_size, shuffle=True)
-
-for aia in scherzo:
-    print(aia)
-    print('\n\n')
-    break
-
 
 #######################
 
@@ -113,7 +97,6 @@ loader_test = DataLoader(test_dataset, shuffle=True, batch_size = args.batch_siz
 criterion = nn.MSELoss()           #Loss function
 
 #Define the model
-n_contract_features = 6
 mymodel = model_managment.CompleteModel(args).to(device)   
 print(mymodel)
 

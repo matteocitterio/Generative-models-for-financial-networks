@@ -12,43 +12,6 @@ from torch_sparse import coalesce
 from torch_sparse import SparseTensor
 import numpy as np
 
-
-def get_sample(args, dataset, num_hist_steps, idx, **kwargs):
-        """
-        Creates a `DataPoint`
-        INPUTS:
-        - `torch_geometric.data.Data` dataset: The dataset from which we want to drawn our sample (Train/Val/Test)
-        - `int` num_hist_step: the number of previous timesteps we are basing our prediction on
-        - `int` idx: index used to identify the portion of dataset
-        - **kwargs: additional keywords like `all_edges`
-        RETURNS:
-        - `dict`: contains the index idx, a list of len=NumHistSteps of datasets, a list of positive edges, a list of negative
-           edges that will be used as ground truth.
-        """
-        hist_adj_list = [dataset[i] for i in range(idx - num_hist_steps, idx)]    #contains both edges and features
-
-
-        #PER IL MULTI-STEP AHEAD
-        # list_of_conditioning = torch.zeros((args.num_nodes, args.steps_ahead)).to(args.device)
-        # list_of_y =  torch.zeros((args.num_nodes, args.steps_ahead)).to(args.device)
-        list_of_conditioning = torch.zeros((args.num_nodes)).to(args.device)
-        list_of_y =  torch.zeros((args.num_nodes)).to(args.device)
-
-        num_of_predictions = args.steps_ahead                 #If 1 no extrapolation performed
-
-        for i in range(num_of_predictions):
-
-            y = dataset[idx + i].y
-            r = dataset[idx + i].r - dataset[idx + i -1].r
-            list_of_y = y
-            # print('shape r; ', r.expand(args.num_nodes).shape)
-            # print('shape cond: ', list_of_conditioning[:,i].shape)
-
-            list_of_conditioning=r.expand(args.num_nodes)    
-
-        return {'hist_adj_list': hist_adj_list}
-        return {'idx': idx, 'hist_adj_list': hist_adj_list, 'y':list_of_y, 'conditions':list_of_conditioning}
-
 def getty(dataset, idx, args):
     
     hist_list = [Data(x=dataset[i].node_feat.reshape(-1,1), edge_index=dataset[i].edge_index) for i in range(idx, idx + args.lookback)]
@@ -75,7 +38,6 @@ class DataSplit(Dataset):
     def __getitem__(self, idx):
 
         i_sample = self.current_index + idx
-        #t = get_sample(self.args, self.dataset, self.NumHistSteps, idx, **self.kwargs)
         t = getty(self.dataset, i_sample, self.args)
 
         return t
