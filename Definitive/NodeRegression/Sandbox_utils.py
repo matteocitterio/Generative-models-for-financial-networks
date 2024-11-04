@@ -390,7 +390,6 @@ def predictions(args, dataset, model):
         with torch.no_grad():
             
             y_preds = model.forward_pred(X,r).cpu()
-            # FOCUS ON FIXED LEG
             y_margin_preds[i_sample] = y_preds
             y_margin_trues[i_sample]  = y_margin.cpu()
             y_benchmark_trues[i_sample]  = y_benchmark.cpu()

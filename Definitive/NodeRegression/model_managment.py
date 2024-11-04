@@ -273,6 +273,7 @@ class LSTMModel(torch.nn.Module):
                         lstm_hidden, _ = self.lstm(contract)
                         prediction = self.regressor(torch.squeeze(torch.cat([lstm_hidden[:,-1,:], hidden_intensity[:,n,:], r[:,j].reshape(-1,1)],dim=1)))
                         pred[:,n, j] += self.fc(self.relu(prediction)).squeeze()
+                    
                         prediction = prediction.unsqueeze(0).unsqueeze(0) #CHANGE TRAINING / PREDICTION
                         #prediction = prediction.unsqueeze(1)
                         contract = torch.cat([contract[:, 1:, :], prediction], dim = 1)
