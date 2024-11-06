@@ -45,12 +45,12 @@ if args.do_simulation:
 
     #Run the actual simulation
     sim.SimulateAllEdges(steps_ahead = args.steps)
-    np.save('Definitive/data/edge_features.npy', sim.E)
+    np.save('../data/edge_features.npy', sim.E)
 
 else:
     
     #Load the matrix
-    sim.E = np.load('Definitive/data/edge_features.npy', allow_pickle=True)
+    sim.E = np.load('../data/edge_features.npy', allow_pickle=True)
 
 
 # Get the simulation active contracts
@@ -147,5 +147,5 @@ for t in loop:
     dataset.append(subgraph)
 
 #Save the dataset
-torch.save(y_benchmark,f'Definitive/data/y_benchmark_{num_nodes}nodes.pt')
-torch.save(dataset, f'Definitive/data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma_TEST.pt')
+torch.save(y_benchmark,f'../data/y_benchmark_{num_nodes}nodes_beta.pt')
+torch.save(dataset, f'../data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma_TEST.pt')
