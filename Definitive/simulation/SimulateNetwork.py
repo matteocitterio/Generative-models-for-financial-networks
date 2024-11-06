@@ -147,5 +147,5 @@ for t in loop:
     dataset.append(subgraph)
 
 #Save the dataset
-torch.save(y_benchmark,f'../data/y_benchmark_{num_nodes}nodes_beta.pt')
-torch.save(dataset, f'../data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma_TEST.pt')
+torch.save(y_benchmark,f'../data/y_benchmark_{num_nodes}nodes.pt')
+torch.save(dataset, f'../data/subgraphs_Duffie_{num_nodes}nodes_{sim.gamma}gamma.pt')
