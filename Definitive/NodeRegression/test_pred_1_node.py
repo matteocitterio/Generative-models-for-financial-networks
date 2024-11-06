@@ -8,7 +8,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
 import numpy as np
-from simulation import Simulation
+from simulation import Simulation, Contract
 
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
@@ -291,13 +291,14 @@ This code will use a fake single contract with maturity T=365 days instead of a 
 #dataset = torch.load(f'/u/mcitterio/data/subgraphs_Duffie_{num_nodes}nodes_{gamma}gamma.pt', map_location=torch.device(device))
 
 #Create a contract with t_0 = 10, T = 364. and delta +1. R and K are computed using sim utils
-contract = torch.tensor([10., 364., +1.,sim.SwapRate(10, 364), 1.0012891292572021  ]).to(torch.float32)
+contract = Contract(t_0=10, sim=sim)
+contract.T = 364
 
 X = []
 for i in range(0, 10):
-    X.append(torch.zeros_like(contract))
+    X.append(torch.zeros_like(contract.get_contract_features(0)))
 for i in range(10, 365):
-    X.append(contract)
+    X.append(contract.get_contract_features(i))
 
 X = torch.stack(X)
 
@@ -307,7 +308,7 @@ training_index = int( training_portion * X.shape[0])
 
 # Identify feautures and targets and reshape them correctly
 features = X
-targets = [sim.GetInstantContractMarginValue(t, contract_4_sim(X[t])) for t in range(364)]
+targets = [contract.GetVariationMargin(t) for t in range(364)]
 #features = torch.stack(features)
 targets = torch.tensor(targets)
 targets = targets.reshape(-1,1)
@@ -325,10 +326,10 @@ targets = torch.tensor(scaler_targets.transform(targets)).to(torch.float32).to(d
 
 #Create the seed0 CIR process and B_t process :
 CIRProcess = sim.CIRProcess[:364]
-B_t = np.asarray([np.prod(1+(CIRProcess[0:t]*1/365)) for t in range(1,len(CIRProcess)+1)])
+B_t = np.asarray([sim.B(t) for t in range(365)])
 CIRProcess = sim.CIRProcess[:365]
 CIRProcess = torch.tensor(CIRProcess.reshape(-1,1)).to(torch.float32)
-B_t = torch.tensor(B_t.reshape(-1,1)).to(torch.float32)
+#B_t = torch.tensor(B_t.reshape(-1,1)).to(torch.float32)
 time = torch.arange(B_t.shape[0]).reshape(-1,1).to(torch.float32).to(device) / training_index
 
 #Normalize the two processes
@@ -343,28 +344,9 @@ scaler_Bt.fit(B_t[0:training_index].reshape(-1,1))
 scaler_Bt.scale_ *= 1.25
 B_t = torch.tensor(scaler_Bt.transform(B_t.reshape(-1,1))).to(torch.float32).to(device)
 
-#Uncomment to see how data is normalized:
-# plt.figure(figsize=(10,10), dpi=300)
-# plt.subplot(4,4,1)
-# plt.hist(CIRProcess.cpu().squeeze(), bins=150, density=True)
-# plt.title('CIR')
-# plt.subplot(4,4,2)
-# plt.hist(B_t.cpu().squeeze(), bins=150, density=True)
-# plt.title('B_t')
-# plt.subplot(4,4,3)
-# plt.hist(time.cpu().squeeze(), bins=150, density=True)
-# plt.title('time')
-
-# for i in range(5):
-#     plt.subplot(4,4,4+i)
-#     feat = []
-#     for j in range(int(features.shape[1]/5)):
-#         feat.append(np.asarray(features[:,j*5+i].cpu()))
-#     plt.hist(np.asarray(feat).ravel(),bins=150, density=True)
-#     plt.title(f'Feature {i}')
-
-# plt.tight_layout()
-# plt.savefig('NormalizationCheck.pdf')
+print('\n\n\n')
+print(targets[:training_index])
+print('\n\n\n')
 
 #Concat in the data matrix, Targets is not actually useful but im gonna keep it for the moment
 X_data = torch.cat([features[:-1, :], time, B_t], axis = 1).to(device)
@@ -372,6 +354,8 @@ X_data = torch.cat([features[:-1, :], time, B_t], axis = 1).to(device)
 # Create train and test sets
 train, CIR_train, targets_train = X_data[:training_index,:], CIRProcess[:training_index], targets[:training_index]
 test, CIR_test, targets_test = X_data[training_index:,:], CIRProcess[training_index:], targets[training_index:]
+
+
 
 #Create the windows of data for training
 lookback = 15
@@ -473,4 +457,5 @@ plt.legend(fontsize=14)
 plt.grid()
 
 plt.tight_layout()
-plt.show()
+#plt.show()
+plt.savefig('ahahahah.pdf')
